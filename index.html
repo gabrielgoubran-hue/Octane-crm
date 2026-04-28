@@ -956,11 +956,12 @@ function renderImport() {
   html += '<div style="margin-top:15px;font-size:12px;color:var(--txt3);line-height:1.8">';
   html += '<strong>CSV Format (columns in order):</strong><br>';
   html += '<strong style="color:var(--oct)">customerID (REQUIRED - must be unique)</strong>, companyName, primaryContactName, primaryContactPhone, secondaryContactName, secondaryContactPhone, city, fleetSize, fuelActive, ostoreActive, fuelAM, ostoreAM, onHitlist, ostoreStatus, ostoreNote, lastActivityOstore, <br>';
-  html += '<strong>whatsappCampaign, whatsappCampaignDate (MM-DD-YYYY), whatsappInterested</strong>, <br>';
-  html += '<strong>telesalesCampaign, telesalesCampaignDate (MM-DD-YYYY), telesalesInterested</strong>, <br>';
-  html += '<strong>dashboardCampaign, dashboardCampaignDate (MM-DD-YYYY), dashboardInterested</strong>';
+  html += '<strong>whatsappCampaign, whatsappCampaignDate, whatsappInterested</strong>, <br>';
+  html += '<strong>telesalesCampaign, telesalesCampaignDate, telesalesInterested</strong>, <br>';
+  html += '<strong>dashboardCampaign, dashboardCampaignDate, dashboardInterested</strong>';
   html += '<br><br><strong>Note:</strong> Rows with duplicate Customer IDs will be automatically skipped.';
-  html += '<br><strong>Date Format:</strong> Use MM-DD-YYYY (e.g., 12-25-2024)';
+  html += '<br><strong>Date Formats Accepted:</strong> MM-DD-YYYY (e.g., 04-26-2026) OR M/D/YYYY (e.g., 4/26/2026)';
+  html += '<br>Both formats work! System automatically converts them.';
   html += '</div></div>';
   
   html += '<div style="background:var(--surface);border-radius:var(--r);padding:25px">';
@@ -1186,14 +1187,36 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-// Convert MM-DD-YYYY to YYYY-MM-DD for internal storage
+// Convert various date formats to YYYY-MM-DD for internal storage
 function convertToISO(dateStr) {
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    // MM-DD-YYYY to YYYY-MM-DD
-    return parts[2] + '-' + parts[0] + '-' + parts[1];
+  
+  // Remove any extra spaces
+  dateStr = dateStr.trim();
+  
+  // Handle MM-DD-YYYY or M-D-YYYY (with dashes)
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const month = parts[0].padStart(2, '0');
+      const day = parts[1].padStart(2, '0');
+      const year = parts[2];
+      return year + '-' + month + '-' + day;
+    }
   }
+  
+  // Handle MM/DD/YYYY or M/D/YYYY (with slashes)
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const month = parts[0].padStart(2, '0');
+      const day = parts[1].padStart(2, '0');
+      const year = parts[2];
+      return year + '-' + month + '-' + day;
+    }
+  }
+  
+  // Already in YYYY-MM-DD format
   return dateStr;
 }
 
