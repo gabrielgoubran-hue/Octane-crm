@@ -531,7 +531,7 @@ function renderCampaigns() {
     html += '<div style="margin-top:25px;margin-bottom:15px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">🚀 Active Campaigns (' + currentCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th></tr></thead>';
+    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
     currentCampaigns.forEach(c => {
@@ -553,6 +553,7 @@ function renderCampaigns() {
       html += '<td><span style="color:var(--red);font-weight:600">' + c.notInterested + '</span></td>';
       html += '<td><span style="color:var(--txt3);font-weight:600">' + c.pending + '</span></td>';
       html += '<td><div style="font-weight:700;font-size:14px;color:' + (successRate >= 50 ? 'var(--green)' : successRate >= 25 ? 'var(--oct)' : 'var(--red)') + '">' + successRate + '%</div></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
       html += '</tr>';
     });
     
@@ -564,7 +565,7 @@ function renderCampaigns() {
     html += '<div style="margin-top:25px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">📜 Historical Campaigns (' + historicalCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th></tr></thead>';
+    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
     historicalCampaigns.forEach(c => {
@@ -586,6 +587,7 @@ function renderCampaigns() {
       html += '<td><span style="color:var(--red)">' + c.notInterested + '</span></td>';
       html += '<td><span style="color:var(--txt3)">' + c.pending + '</span></td>';
       html += '<td><div style="font-size:14px;color:' + (successRate >= 50 ? 'var(--green)' : successRate >= 25 ? 'var(--oct)' : 'var(--red)') + '">' + successRate + '%</div></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white;opacity:1" onclick="deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
       html += '</tr>';
     });
     
@@ -640,6 +642,63 @@ function removeFromHitlist(id) {
     render();
     toast('Removed from hit list', 'success');
   }
+}
+
+function deleteCampaign(type, name) {
+  const message = 'Are you sure you want to delete "' + name + '" (' + type + ') from ALL customers?\n\nThis will remove it from:\n- Current campaigns\n- Campaign history\n\nThis action cannot be undone!';
+  
+  if (!confirm(message)) return;
+  
+  let removedCount = 0;
+  
+  S.customers.forEach(customer => {
+    let wasRemoved = false;
+    
+    // Remove from current WhatsApp campaign
+    if (type === 'WhatsApp' && customer.whatsappCampaign === name) {
+      customer.whatsappCampaign = '';
+      customer.whatsappCampaignDate = '';
+      customer.whatsappInterested = '';
+      wasRemoved = true;
+    }
+    
+    // Remove from current Telesales campaign
+    if (type === 'Telesales' && customer.telesalesCampaign === name) {
+      customer.telesalesCampaign = '';
+      customer.telesalesCampaignDate = '';
+      customer.telesalesInterested = '';
+      wasRemoved = true;
+    }
+    
+    // Remove from current Dashboard campaign
+    if (type === 'Dashboard' && customer.dashboardCampaign === name) {
+      customer.dashboardCampaign = '';
+      customer.dashboardCampaignDate = '';
+      customer.dashboardInterested = '';
+      wasRemoved = true;
+    }
+    
+    // Remove from campaign history
+    if (customer.campaignHistory && customer.campaignHistory.length > 0) {
+      const originalLength = customer.campaignHistory.length;
+      customer.campaignHistory = customer.campaignHistory.filter(h => 
+        !(h.type === type && h.name === name)
+      );
+      if (customer.campaignHistory.length < originalLength) {
+        wasRemoved = true;
+      }
+    }
+    
+    if (wasRemoved) {
+      removedCount++;
+      updateLastCampaign(customer);
+    }
+  });
+  
+  logActivity('Deleted campaign: ' + type + ' - ' + name, removedCount + ' customers affected');
+  saveData();
+  render();
+  toast('Campaign deleted from ' + removedCount + ' customers', 'success');
 }
 
 // LOGS PAGE
