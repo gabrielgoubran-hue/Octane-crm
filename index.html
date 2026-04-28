@@ -136,7 +136,22 @@ function init() {
 
 function loadData() {
   const saved = localStorage.getItem('octane_customers');
-  if (saved) S.customers = JSON.parse(saved);
+  if (saved) {
+    S.customers = JSON.parse(saved);
+    
+    // Update last campaign for all customers (fixes old data)
+    let needsUpdate = false;
+    S.customers.forEach(c => {
+      const oldCampaign = c.lastOutboundCampaign;
+      updateLastCampaign(c);
+      if (oldCampaign !== c.lastOutboundCampaign) needsUpdate = true;
+    });
+    
+    // Save if any updates were made
+    if (needsUpdate) {
+      localStorage.setItem('octane_customers', JSON.stringify(S.customers));
+    }
+  }
   
   const savedLogs = localStorage.getItem('octane_logs');
   if (savedLogs) S.activityLogs = JSON.parse(savedLogs);
@@ -146,9 +161,52 @@ function loadData() {
 }
 
 function saveData() {
+  // Update last campaign for all customers before saving
+  S.customers.forEach(c => {
+    updateLastCampaign(c);
+  });
+  
   localStorage.setItem('octane_customers', JSON.stringify(S.customers));
   localStorage.setItem('octane_logs', JSON.stringify(S.activityLogs));
   localStorage.setItem('octane_users', JSON.stringify(S.users));
+}
+
+function updateLastCampaign(customer) {
+  // Determine the most recent campaign
+  let lastCampaign = '';
+  let lastDate = null;
+  
+  // Check WhatsApp
+  if (customer.whatsappCampaign) {
+    const waDate = customer.whatsappCampaignDate ? new Date(customer.whatsappCampaignDate) : new Date(0);
+    if (!lastDate || waDate > lastDate) {
+      lastDate = waDate;
+      lastCampaign = 'WhatsApp: ' + customer.whatsappCampaign;
+    }
+  }
+  
+  // Check Telesales
+  if (customer.telesalesCampaign) {
+    const tsDate = customer.telesalesCampaignDate ? new Date(customer.telesalesCampaignDate) : new Date(0);
+    if (!lastDate || tsDate > lastDate) {
+      lastDate = tsDate;
+      lastCampaign = 'Telesales: ' + customer.telesalesCampaign;
+    }
+  }
+  
+  // Check Dashboard
+  if (customer.dashboardCampaign) {
+    const dbDate = customer.dashboardCampaignDate ? new Date(customer.dashboardCampaignDate) : new Date(0);
+    if (!lastDate || dbDate > lastDate) {
+      lastDate = dbDate;
+      lastCampaign = 'Dashboard: ' + customer.dashboardCampaign;
+    }
+  }
+  
+  customer.lastOutboundCampaign = lastCampaign;
+  if (lastDate && lastDate.getTime() > 0) {
+    customer.lastOutboundEngagement = lastDate.toISOString();
+  }
 }
 
 function logActivity(action, customerName) {
@@ -902,17 +960,8 @@ function saveEdit() {
   
   if (c.ostoreActive) c.lastActivityOstore = new Date().toISOString();
   
-  // Update last campaign tracking
-  if (c.whatsappInterested && c.whatsappCampaign) {
-    c.lastOutboundCampaign = 'WhatsApp: ' + c.whatsappCampaign;
-    c.lastOutboundEngagement = new Date().toISOString();
-  } else if (c.telesalesInterested && c.telesalesCampaign) {
-    c.lastOutboundCampaign = 'Telesales: ' + c.telesalesCampaign;
-    c.lastOutboundEngagement = new Date().toISOString();
-  } else if (c.dashboardInterested && c.dashboardCampaign) {
-    c.lastOutboundCampaign = 'Dashboard: ' + c.dashboardCampaign;
-    c.lastOutboundEngagement = new Date().toISOString();
-  }
+  // Update last campaign tracking (automatic)
+  updateLastCampaign(c);
   
   logActivity('Edited customer', c.companyName);
   saveData();
