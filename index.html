@@ -684,7 +684,7 @@ function renderOrders() {
     html += '<div style="margin-top:25px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">All Orders</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Quotation ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th></tr></thead>';
+    html += '<thead><tr><th>Quotation ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
     S.orders.forEach(o => {
@@ -703,6 +703,7 @@ function renderOrders() {
       html += '<td style="font-weight:600;color:' + (margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--oct)' : 'var(--red)') + '">' + margin + '%</td>';
       html += '<td><span style="color:' + statusColor + ';font-weight:600">' + (o.status || '—') + '</span></td>';
       html += '<td style="font-size:12px">' + (o.salesPerson || '—') + '</td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="deleteOrder(\'' + (o.quotationId || '').replace(/'/g, "\\'") + '\')">🗑️</button></td>';
       html += '</tr>';
     });
     
@@ -812,6 +813,27 @@ function deleteCampaign(type, name) {
   saveData();
   render();
   toast('Campaign deleted from ' + removedCount + ' customers', 'success');
+}
+
+function deleteOrder(quotationId) {
+  if (!quotationId) return;
+  
+  const order = S.orders.find(o => o.quotationId === quotationId);
+  if (!order) return;
+  
+  const message = 'Are you sure you want to delete order "' + quotationId + '"?\n\nCustomer: ' + order.customerId + '\nProduct: ' + order.productType + ' - ' + order.productBrand + '\nAmount: $' + (parseFloat(order.sellingPrice) || 0).toLocaleString() + '\n\nThis action cannot be undone!';
+  
+  if (!confirm(message)) return;
+  
+  // Remove order from array
+  const index = S.orders.findIndex(o => o.quotationId === quotationId);
+  if (index !== -1) {
+    S.orders.splice(index, 1);
+    logActivity('Deleted order', quotationId);
+    saveData();
+    render();
+    toast('Order deleted successfully', 'success');
+  }
 }
 
 // LOGS PAGE
@@ -1237,6 +1259,23 @@ function renderImport() {
   
   html += '<div id="import-orders-section" style="background:var(--surface);border-radius:var(--r);padding:25px;margin-top:20px">';
   html += '<h3 style="margin-bottom:15px">📦 Import Orders from CSV</h3>';
+  
+  html += '<div style="margin-bottom:20px;padding:15px;background:var(--blue-l);border:1px solid rgba(21,101,192,.15);border-radius:var(--r)">';
+  html += '<div style="font-weight:600;margin-bottom:10px;color:var(--blue)">Import Mode:</div>';
+  html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">';
+  html += '<input type="radio" name="orders-import-mode" value="insert" checked> ';
+  html += '<strong>Insert Only</strong> - Add new orders, skip existing Quotation IDs';
+  html += '</label>';
+  html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">';
+  html += '<input type="radio" name="orders-import-mode" value="update"> ';
+  html += '<strong>Update Only</strong> - Update existing orders, skip new Quotation IDs';
+  html += '</label>';
+  html += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">';
+  html += '<input type="radio" name="orders-import-mode" value="upsert"> ';
+  html += '<strong>Insert & Update (Upsert)</strong> - Add new orders AND update existing ones';
+  html += '</label>';
+  html += '</div>';
+  
   html += '<div class="upload-zone" onclick="document.getElementById(\'orders-csv-file\').click()">';
   html += '<div style="font-size:48px;margin-bottom:10px">📦</div>';
   html += '<div style="font-weight:600;margin-bottom:5px">Click to upload Orders CSV file</div>';
@@ -1531,6 +1570,9 @@ function toast(msg, type) {
 function handleOrdersCSV(file) {
   if (!file) return;
   
+  // Get selected import mode
+  const mode = document.querySelector('input[name="orders-import-mode"]:checked')?.value || 'insert';
+  
   const reader = new FileReader();
   reader.onload = function(e) {
     const text = e.target.result;
@@ -1541,18 +1583,47 @@ function handleOrdersCSV(file) {
       return;
     }
     
-    let imported = 0;
+    let inserted = 0;
+    let updated = 0;
     let skipped = 0;
     
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
       if (values.length < 15) continue;
       
+      const quotationId = values[3];
+      
+      // Check if order already exists
+      const existingIndex = S.orders.findIndex(o => o.quotationId === quotationId);
+      const exists = existingIndex !== -1;
+      
+      // Handle based on mode
+      if (mode === 'insert' && exists) {
+        skipped++;
+        continue; // Skip existing orders in insert-only mode
+      }
+      
+      if (mode === 'update' && !exists) {
+        skipped++;
+        continue; // Skip new orders in update-only mode
+      }
+      
+      // Helper function to parse numbers with commas
+      const parseNumber = (str) => {
+        if (!str) return 0;
+        const cleaned = str.replace(/,/g, '');
+        return parseFloat(cleaned) || 0;
+      };
+      
+      const cost = parseNumber(values[14]);
+      const sellingPrice = parseNumber(values[15]);
+      const margin = values[16] ? parseNumber(values[16]) : (sellingPrice > 0 ? Math.round(((sellingPrice - cost) / sellingPrice) * 100) : 0);
+      
       const order = {
         customerId: values[0],
         campaignChannel: values[1],
         campaignName: values[2],
-        quotationId: values[3],
+        quotationId: quotationId,
         quotationDate: convertToISO(values[4]),
         salesOrderId: values[5],
         salesOrderDate: convertToISO(values[6]),
@@ -1563,12 +1634,11 @@ function handleOrdersCSV(file) {
         quantity: parseInt(values[11]) || 0,
         vendor: values[12],
         status: values[13],
-        cost: parseFloat(values[14]) || 0,
-        sellingPrice: parseFloat(values[15]) || 0,
-        margin: values[16] ? parseFloat(values[16]) : Math.round(((parseFloat(values[15]) - parseFloat(values[14])) / parseFloat(values[15])) * 100),
+        cost: cost,
+        sellingPrice: sellingPrice,
+        margin: margin,
         creditDuration: values[17] || '',
-        salesPerson: values[18] || '',
-        createdAt: new Date().toISOString()
+        salesPerson: values[18] || ''
       };
       
       if (!order.customerId || !order.quotationId) {
@@ -1576,18 +1646,36 @@ function handleOrdersCSV(file) {
         continue;
       }
       
-      S.orders.push(order);
-      imported++;
+      if (exists) {
+        // UPDATE existing order
+        S.orders[existingIndex] = {
+          ...order,
+          createdAt: S.orders[existingIndex].createdAt
+        };
+        updated++;
+        logActivity('Updated order from CSV', order.quotationId);
+      } else {
+        // INSERT new order
+        order.createdAt = new Date().toISOString();
+        S.orders.push(order);
+        inserted++;
+        logActivity('Imported order from CSV', order.quotationId);
+      }
     }
     
-    logActivity('Imported ' + imported + ' orders from CSV', '');
     saveData();
     
-    let message = 'Imported ' + imported + ' orders';
-    if (skipped > 0) message += ' (' + skipped + ' skipped)';
+    let message = '';
+    if (inserted > 0) message += inserted + ' inserted';
+    if (updated > 0) message += (message ? ', ' : '') + updated + ' updated';
+    if (skipped > 0) message += (message ? ', ' : '') + skipped + ' skipped';
     
-    toast(message, 'success');
-    go('orders');
+    if (inserted === 0 && updated === 0) {
+      toast('No orders imported. Check your CSV format and import mode.', 'error');
+    } else {
+      toast('Import complete: ' + message, 'success');
+      go('orders');
+    }
   };
   
   reader.readAsText(file);
