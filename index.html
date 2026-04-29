@@ -670,9 +670,13 @@ function renderCampaigns() {
   
   // Calculate orders analytics for campaigns
   const campaignOrders = S.orders.filter(o => {
-    return filteredCampaigns.some(c => 
-      c.type === o.campaignChannel && c.name === o.campaignName
-    );
+    return filteredCampaigns.some(c => {
+      const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
+      const orderName = (o.campaignName || '').trim().toLowerCase();
+      const campType = (c.type || '').trim().toLowerCase();
+      const campName = (c.name || '').trim().toLowerCase();
+      return orderChannel === campType && orderName === campName;
+    });
   });
   const totalCampaignOrders = campaignOrders.length;
   const totalCampaignRevenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
@@ -699,7 +703,7 @@ function renderCampaigns() {
   
   // Search and Filters
   html += '<div class="fbar">';
-  html += '<input type="text" placeholder="Search company, customer, ID, O-store AM…" value="' + S.cSearch + '" oninput="S.cSearch=this.value;render()">';
+  html += '<input type="text" id="campaign-search-input" placeholder="Search company, customer, ID, O-store AM…" value="' + S.cSearch + '" oninput="handleCampaignSearch(this.value)">';
   html += '<select onchange="S.cType=this.value;render()"><option value="">All Types</option><option value="WhatsApp"' + (S.cType === 'WhatsApp' ? ' selected' : '') + '>WhatsApp</option><option value="Telesales"' + (S.cType === 'Telesales' ? ' selected' : '') + '>Telesales</option><option value="Dashboard"' + (S.cType === 'Dashboard' ? ' selected' : '') + '>Dashboard</option></select>';
   html += '<input type="date" placeholder="From Date" value="' + S.cDateFrom + '" onchange="S.cDateFrom=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
   html += '<input type="date" placeholder="To Date" value="' + S.cDateTo + '" onchange="S.cDateTo=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
@@ -720,7 +724,7 @@ function renderCampaigns() {
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
       // Calculate orders and revenue for this campaign
-      const campaignOrders = S.orders.filter(o => o.campaignChannel === c.type && o.campaignName === c.name);
+      const campaignOrders = getCampaignOrders(c);
       const orderCount = campaignOrders.length;
       const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
       const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
@@ -797,7 +801,7 @@ function renderCampaigns() {
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
       // Calculate orders and revenue for this campaign
-      const campaignOrders = S.orders.filter(o => o.campaignChannel === c.type && o.campaignName === c.name);
+      const campaignOrders = getCampaignOrders(c);
       const orderCount = campaignOrders.length;
       const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
       const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
@@ -917,7 +921,7 @@ function renderOrders() {
   
   // Search and Filters
   html += '<div class="fbar" style="margin-top:20px">';
-  html += '<input type="text" placeholder="Search customer ID, name, product, sales order ID…" value="' + S.oSearch + '" oninput="S.oSearch=this.value;render()">';
+  html += '<input type="text" id="order-search-input" placeholder="Search customer ID, name, product, sales order ID…" value="' + S.oSearch + '" oninput="handleOrderSearch(this.value)">';
   
   // Get unique values for dropdowns
   const paymentMethods = [...new Set(S.orders.map(o => o.paymentMethod).filter(Boolean))].sort();
@@ -1965,6 +1969,185 @@ function handleSearch(value) {
     searchInput.setSelectionRange(value.length, value.length);
   }
 }
+
+function handleCampaignSearch(value) {
+  S.cSearch = value;
+  const content = document.getElementById('content');
+  const oldScroll = content.scrollTop;
+  render();
+  content.scrollTop = oldScroll;
+  // Restore focus to campaign search input
+  setTimeout(() => {
+    const searchInput = document.getElementById('campaign-search-input');
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.setSelectionRange(value.length, value.length);
+    }
+  }, 0);
+}
+
+function handleOrderSearch(value) {
+  S.oSearch = value;
+  const content = document.getElementById('content');
+  const oldScroll = content.scrollTop;
+  render();
+  content.scrollTop = oldScroll;
+  // Restore focus to order search input
+  setTimeout(() => {
+    const searchInput = document.getElementById('order-search-input');
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.setSelectionRange(value.length, value.length);
+    }
+  }, 0);
+}
+
+// Helper function to get orders for a campaign with flexible matching
+function getCampaignOrders(campaign) {
+  return S.orders.filter(o => {
+    const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
+    const orderName = (o.campaignName || '').trim().toLowerCase();
+    const campType = (campaign.type || '').trim().toLowerCase();
+    const campName = (campaign.name || '').trim().toLowerCase();
+    return orderChannel === campType && orderName === campName;
+  });
+}
+
+// DEBUG HELPER: Call this from browser console to check your data
+window.debugCampaignOrders = function() {
+  console.log('=== CAMPAIGN-ORDER MATCHING DEBUG ===');
+  console.log('Total Orders:', S.orders.length);
+  console.log('Total Customers:', S.customers.length);
+  console.log('\n=== ALL CAMPAIGNS (from customers) ===');
+  
+  // Get all unique campaign types and names from customers
+  const campaigns = new Set();
+  S.customers.forEach(c => {
+    if (c.whatsappCampaign) campaigns.add('WhatsApp|' + c.whatsappCampaign);
+    if (c.telesalesCampaign) campaigns.add('Telesales|' + c.telesalesCampaign);
+    if (c.dashboardCampaign) campaigns.add('Dashboard|' + c.dashboardCampaign);
+  });
+  
+  campaigns.forEach(campKey => {
+    const [type, name] = campKey.split('|');
+    console.log(`\n📢 Campaign: "${type}" - "${name}"`);
+    const orders = getCampaignOrders({type, name});
+    console.log('  ✅ Orders found:', orders.length);
+    if (orders.length > 0) {
+      orders.forEach(o => {
+        console.log(`    - Order: ${o.salesOrderId} | Customer: ${o.customerId} | $${o.sellingPrice}`);
+      });
+    } else {
+      console.log('  ⚠️ No orders matched this campaign!');
+    }
+  });
+  
+  console.log('\n=== ORDERS WITHOUT CAMPAIGN INFO ===');
+  const noCampaignOrders = S.orders.filter(o => !o.campaignChannel && !o.campaignName);
+  console.log('Count:', noCampaignOrders.length);
+  noCampaignOrders.forEach(o => {
+    console.log(`  Order ${o.salesOrderId} | Customer: ${o.customerId} | Status: ${o.status}`);
+  });
+  
+  console.log('\n=== ORDERS WITH CAMPAIGN INFO ===');
+  const withCampaignOrders = S.orders.filter(o => o.campaignChannel || o.campaignName);
+  console.log('Count:', withCampaignOrders.length);
+  withCampaignOrders.forEach(o => {
+    console.log(`  Order: ${o.salesOrderId}`);
+    console.log(`    Channel: "${o.campaignChannel}" (${o.campaignChannel?.length} chars)`);
+    console.log(`    Name: "${o.campaignName}" (${o.campaignName?.length} chars)`);
+    console.log(`    Customer: ${o.customerId} | Status: ${o.status}`);
+  });
+  
+  console.log('\n=== POTENTIAL MISMATCHES ===');
+  // Check for orders that don't match any campaign
+  const allCampaignsList = Array.from(campaigns).map(k => {
+    const [type, name] = k.split('|');
+    return {type, name};
+  });
+  
+  withCampaignOrders.forEach(o => {
+    const matched = allCampaignsList.some(c => {
+      const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
+      const orderName = (o.campaignName || '').trim().toLowerCase();
+      const campType = (c.type || '').trim().toLowerCase();
+      const campName = (c.name || '').trim().toLowerCase();
+      return orderChannel === campType && orderName === campName;
+    });
+    
+    if (!matched) {
+      console.log(`  ❌ Order ${o.salesOrderId} doesn't match any campaign!`);
+      console.log(`     Looking for: Channel="${o.campaignChannel}" Name="${o.campaignName}"`);
+      
+      // Find similar campaigns
+      allCampaignsList.forEach(c => {
+        const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
+        const orderName = (o.campaignName || '').trim().toLowerCase();
+        const campType = (c.type || '').trim().toLowerCase();
+        const campName = (c.name || '').trim().toLowerCase();
+        
+        if (orderChannel === campType && orderName !== campName) {
+          console.log(`     💡 Similar: Channel matches "${c.type}" but name "${c.name}" ≠ "${o.campaignName}"`);
+        }
+        if (orderChannel !== campType && orderName === campName) {
+          console.log(`     💡 Similar: Name matches "${c.name}" but channel "${c.type}" ≠ "${o.campaignChannel}"`);
+        }
+      });
+    }
+  });
+  
+  console.log('\n=== SUMMARY ===');
+  console.log('Total campaigns:', campaigns.size);
+  console.log('Orders with campaign info:', withCampaignOrders.length);
+  console.log('Orders without campaign info:', noCampaignOrders.length);
+  console.log('Total orders linked to campaigns:', 
+    Array.from(campaigns).reduce((sum, campKey) => {
+      const [type, name] = campKey.split('|');
+      return sum + getCampaignOrders({type, name}).length;
+    }, 0)
+  );
+};
+
+// EXPORT HELPER: Export your data for sharing
+window.exportData = function() {
+  const data = {
+    customers: S.customers.map(c => ({
+      id: c.id,
+      companyName: c.companyName,
+      whatsappCampaign: c.whatsappCampaign,
+      whatsappInterested: c.whatsappInterested,
+      telesalesCampaign: c.telesalesCampaign,
+      telesalesInterested: c.telesalesInterested,
+      dashboardCampaign: c.dashboardCampaign,
+      dashboardInterested: c.dashboardInterested
+    })),
+    orders: S.orders.map(o => ({
+      salesOrderId: o.salesOrderId,
+      customerId: o.customerId,
+      campaignChannel: o.campaignChannel,
+      campaignName: o.campaignName,
+      productType: o.productType,
+      sellingPrice: o.sellingPrice,
+      status: o.status
+    }))
+  };
+  
+  console.log('=== COPY THIS DATA ===');
+  console.log(JSON.stringify(data, null, 2));
+  console.log('\n=== OR DOWNLOAD AS FILE ===');
+  
+  // Also create downloadable file
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'octane-crm-debug-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  console.log('✅ File downloaded: octane-crm-debug-data.json');
+  return data;
+};
 
 function handleOrdersCSV(file) {
   if (!file) return;
