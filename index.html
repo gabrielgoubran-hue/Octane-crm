@@ -97,6 +97,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="logo">⛽</div>
     <button class="nb active" id="nav-accounts" onclick="go('accounts')">📋</button>
     <button class="nb" id="nav-campaigns" onclick="go('campaigns')">📢</button>
+    <button class="nb" id="nav-orders" onclick="go('orders')">📦</button>
     <button class="nb" id="nav-hitlist" onclick="go('hitlist')">🎯</button>
     <button class="nb" id="nav-logs" onclick="go('logs')">📜</button>
     <button class="nb" id="nav-import" onclick="go('import')">📥</button>
@@ -118,6 +119,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 const S = {
   page: 'accounts',
   customers: [],
+  orders: [],
   users: [{id: 'admin', name: 'Admin User', team: 'admin'}],
   activityLogs: [],
   expandedId: null,
@@ -153,6 +155,9 @@ function loadData() {
     }
   }
   
+  const savedOrders = localStorage.getItem('octane_orders');
+  if (savedOrders) S.orders = JSON.parse(savedOrders);
+  
   const savedLogs = localStorage.getItem('octane_logs');
   if (savedLogs) S.activityLogs = JSON.parse(savedLogs);
   
@@ -167,6 +172,7 @@ function saveData() {
   });
   
   localStorage.setItem('octane_customers', JSON.stringify(S.customers));
+  localStorage.setItem('octane_orders', JSON.stringify(S.orders));
   localStorage.setItem('octane_logs', JSON.stringify(S.activityLogs));
   localStorage.setItem('octane_users', JSON.stringify(S.users));
 }
@@ -234,6 +240,7 @@ function render() {
   const el = document.getElementById('content');
   if (S.page === 'accounts') el.innerHTML = renderAccounts();
   else if (S.page === 'campaigns') el.innerHTML = renderCampaigns();
+  else if (S.page === 'orders') el.innerHTML = renderOrders();
   else if (S.page === 'hitlist') el.innerHTML = renderHitlist();
   else if (S.page === 'logs') el.innerHTML = renderLogs();
   else if (S.page === 'import') el.innerHTML = renderImport();
@@ -267,11 +274,16 @@ function renderAccounts() {
     const lastCampaign = c.lastOutboundCampaign || '—';
     const interest = c.whatsappInterested || c.telesalesInterested || c.dashboardInterested || '—';
     
+    // Calculate revenue for this customer
+    const customerOrders = S.orders.filter(o => o.customerId === c.id);
+    const revenue = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+    
     let html = '<tr onclick="toggleExpand(\'' + c.id + '\')">';
     html += '<td><div style="font-weight:600;font-size:13px">' + c.companyName + '</div>';
     html += '<div style="font-size:11px;color:var(--txt3)">' + (c.primaryContactName || '') + '</div></td>';
     html += '<td style="font-size:12px;color:var(--txt2)">' + (c.city || '') + '</td>';
     html += '<td style="font-weight:600;color:var(--oct)">' + (c.fleetSize || 0) + '</td>';
+    html += '<td style="font-weight:700;color:' + (revenue > 0 ? 'var(--green)' : 'var(--txt3)') + '">$' + (revenue > 0 ? revenue.toLocaleString() : '0') + '</td>';
     html += '<td><span class="badge ' + (c.fuelActive ? 'b-active' : 'b-inactive') + '">' + (c.fuelActive ? 'Active' : 'Inactive') + '</span></td>';
     html += '<td><span class="badge ' + (c.ostoreActive ? 'b-active' : 'b-inactive') + '">' + (c.ostoreActive ? 'Active' : 'Inactive') + '</span></td>';
     html += '<td>' + (c.ostoreStatus ? '<span class="badge">' + c.ostoreStatus + '</span>' : '—') + '</td>';
@@ -282,11 +294,14 @@ function renderAccounts() {
     html += '</tr>';
     
     if (isExp) {
-      html += '<tr><td colspan="10" class="expand-td"><div class="expand-panel">' + renderExpand(c) + '</div></td></tr>';
+      html += '<tr><td colspan="11" class="expand-td"><div class="expand-panel">' + renderExpand(c) + '</div></td></tr>';
     }
     
     return html;
   }).join('');
+  
+  // Calculate totals
+  const totalRevenue = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
   
   let html = '<div>';
   html += '<div class="page-head">';
@@ -303,6 +318,7 @@ function renderAccounts() {
   html += '<div class="stat"><div class="stat-lbl">Campaign Offers</div><div class="stat-val" style="color:var(--blue)">' + campaignOffers + '</div><div class="stat-sub">Total sent</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Leads Generated</div><div class="stat-val" style="color:var(--green)">' + leadsGenerated + '</div><div class="stat-sub">From campaigns</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Converted</div><div class="stat-val" style="color:var(--oct)">' + convertedCustomers + '</div><div class="stat-sub">Offer accepted</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Total Revenue</div><div class="stat-val" style="color:var(--green)">$' + totalRevenue.toLocaleString() + '</div><div class="stat-sub">All orders</div></div>';
   html += '</div>';
   
   html += '<div class="fbar">';
@@ -314,8 +330,8 @@ function renderAccounts() {
   html += '</select></div>';
   
   html += '<div class="tbl-wrap"><table class="tbl">';
-  html += '<thead><tr><th>Company</th><th>City</th><th>Fleet Size</th><th>Fuel Activity</th><th>O-store Activity</th><th>Status</th><th>Hitlist</th><th>Last Campaign</th><th>Interest</th><th></th></tr></thead>';
-  html += '<tbody>' + (rows || '<tr><td colspan="10"><div class="empty">No customers found</div></td></tr>') + '</tbody>';
+  html += '<thead><tr><th>Company</th><th>City</th><th>Fleet Size</th><th>Revenue</th><th>Fuel Activity</th><th>O-store Activity</th><th>Status</th><th>Hitlist</th><th>Last Campaign</th><th>Interest</th><th></th></tr></thead>';
+  html += '<tbody>' + (rows || '<tr><td colspan="11"><div class="empty">No customers found</div></td></tr>') + '</tbody>';
   html += '</table></div></div>';
   
   return html;
@@ -332,6 +348,19 @@ function renderExpand(c) {
   html += '<div class="ep-field"><div class="ep-label">Fuel AM</div><div class="ep-val">' + (c.fuelAM || '—') + '</div></div>';
   html += '<div class="ep-field"><div class="ep-label">O-store AM</div><div class="ep-val">' + (c.ostoreAM || '—') + '</div></div>';
   html += '</div>';
+  
+  // Order Summary
+  const customerOrders = S.orders.filter(o => o.customerId === c.id);
+  if (customerOrders.length > 0) {
+    const totalRevenue = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+    html += '<div style="margin-top:15px;padding:15px;background:var(--green-l);border:1px solid var(--green);border-radius:var(--r)">';
+    html += '<div style="font-weight:700;color:var(--green);margin-bottom:8px">📦 Orders Summary</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:13px">';
+    html += '<div><span style="color:var(--txt3)">Total Orders:</span> <strong>' + customerOrders.length + '</strong></div>';
+    html += '<div><span style="color:var(--txt3)">Total Revenue:</span> <strong>$' + totalRevenue.toLocaleString() + '</strong></div>';
+    html += '<div><span style="color:var(--txt3)">Completed:</span> <strong>' + customerOrders.filter(o => o.status === 'Completed').length + '</strong></div>';
+    html += '</div></div>';
+  }
   
   if (c.ostoreNote) {
     html += '<div style="margin-top:15px;padding-top:15px;border-top:1px solid var(--border)">';
@@ -596,6 +625,90 @@ function renderCampaigns() {
   
   if (totalCampaigns === 0) {
     html += '<div class="empty">No campaigns yet. Add campaigns to customers to see analytics here.</div>';
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+// ORDERS PAGE
+function renderOrders() {
+  const totalOrders = S.orders.length;
+  const totalRevenue = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+  const totalCost = S.orders.reduce((sum, o) => sum + (parseFloat(o.cost) || 0), 0);
+  const avgMargin = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 0;
+  
+  // Unique customers who ordered
+  const uniqueCustomers = new Set(S.orders.map(o => o.customerId)).size;
+  
+  // Orders by status
+  const quotations = S.orders.filter(o => o.status === 'Quotation').length;
+  const processed = S.orders.filter(o => o.status === 'Processed').length;
+  const completed = S.orders.filter(o => o.status === 'Completed').length;
+  const cancelled = S.orders.filter(o => o.status === 'Cancelled').length;
+  
+  // Revenue by product type
+  const lubesRevenue = S.orders.filter(o => o.productType === 'Lubes').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  const tiresRevenue = S.orders.filter(o => o.productType === 'Tires').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  const batteriesRevenue = S.orders.filter(o => o.productType === 'Batteries').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  
+  let html = '<div>';
+  html += '<div class="page-head">';
+  html += '<div><div class="ph-title">📦 Orders</div><div class="ph-sub">' + totalOrders + ' total orders</div></div>';
+  html += '<div class="ph-right"><button class="btn btn-primary" onclick="go(\'import\');setTimeout(() => document.getElementById(\'import-orders-section\').scrollIntoView({behavior:\'smooth\'}), 100)">📥 Import Orders</button></div>';
+  html += '</div>';
+  
+  // Stats
+  html += '<div class="stat-row">';
+  html += '<div class="stat"><div class="stat-lbl">Total Orders</div><div class="stat-val" style="color:var(--blue)">' + totalOrders + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Total Revenue</div><div class="stat-val" style="color:var(--green)">$' + totalRevenue.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Avg Margin</div><div class="stat-val" style="color:var(--oct)">' + avgMargin + '%</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Customers Ordered</div><div class="stat-val" style="color:var(--oct)">' + uniqueCustomers + '</div><div class="stat-sub">Unique customers</div></div>';
+  html += '</div>';
+  
+  html += '<div class="stat-row">';
+  html += '<div class="stat"><div class="stat-lbl">Quotation</div><div class="stat-val" style="color:var(--txt3)">' + quotations + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Processed</div><div class="stat-val" style="color:var(--blue)">' + processed + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:var(--green)">' + completed + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Cancelled</div><div class="stat-val" style="color:var(--red)">' + cancelled + '</div></div>';
+  html += '</div>';
+  
+  html += '<div class="stat-row">';
+  html += '<div class="stat"><div class="stat-lbl">Lubes Revenue</div><div class="stat-val" style="color:#0ea5e9">$' + lubesRevenue.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Tires Revenue</div><div class="stat-val" style="color:#8b5cf6">$' + tiresRevenue.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Batteries Revenue</div><div class="stat-val" style="color:#f59e0b">$' + batteriesRevenue.toLocaleString() + '</div></div>';
+  html += '</div>';
+  
+  // Orders table
+  if (totalOrders > 0) {
+    html += '<div style="margin-top:25px">';
+    html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">All Orders</h3>';
+    html += '<div class="tbl-wrap"><table class="tbl">';
+    html += '<thead><tr><th>Quotation ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th></tr></thead>';
+    html += '<tbody>';
+    
+    S.orders.forEach(o => {
+      const customer = S.customers.find(c => c.id === o.customerId);
+      const customerName = customer ? customer.companyName : o.customerId;
+      const margin = o.sellingPrice && o.cost ? Math.round(((o.sellingPrice - o.cost) / o.sellingPrice) * 100) : 0;
+      const statusColor = o.status === 'Completed' ? 'var(--green)' : o.status === 'Cancelled' ? 'var(--red)' : o.status === 'Processed' ? 'var(--blue)' : 'var(--txt3)';
+      
+      html += '<tr>';
+      html += '<td style="font-weight:600;font-size:13px">' + (o.quotationId || '—') + '</td>';
+      html += '<td>' + customerName + '</td>';
+      html += '<td><div style="font-size:12px"><span style="color:' + (o.campaignChannel === 'WhatsApp' ? '#0ea5e9' : o.campaignChannel === 'Telesales' ? '#8b5cf6' : '#f59e0b') + '">' + (o.campaignChannel || '—') + '</span></div><div style="font-size:11px;color:var(--txt3)">' + (o.campaignName || '') + '</div></td>';
+      html += '<td><div style="font-size:12px;font-weight:600">' + (o.productType || '—') + '</div><div style="font-size:11px;color:var(--txt3)">' + (o.productBrand || '') + '</div></td>';
+      html += '<td>' + (o.quantity || 0) + '</td>';
+      html += '<td style="font-weight:600;color:var(--green)">$' + (parseFloat(o.sellingPrice) || 0).toLocaleString() + '</td>';
+      html += '<td style="font-weight:600;color:' + (margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--oct)' : 'var(--red)') + '">' + margin + '%</td>';
+      html += '<td><span style="color:' + statusColor + ';font-weight:600">' + (o.status || '—') + '</span></td>';
+      html += '<td style="font-size:12px">' + (o.salesPerson || '—') + '</td>';
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table></div></div>';
+  } else {
+    html += '<div class="empty">No orders yet. Import orders to see analytics here.</div>';
   }
   
   html += '</div>';
@@ -1076,7 +1189,27 @@ function renderImport() {
   html += '<h3 style="margin-bottom:15px">💾 Export to CSV</h3>';
   html += '<p style="margin-bottom:15px;font-size:14px;color:var(--txt2)">Download all customers as CSV file</p>';
   html += '<button class="btn btn-primary" onclick="exportData()">Download CSV</button>';
+  html += '</div>';
+  
+  html += '<div id="import-orders-section" style="background:var(--surface);border-radius:var(--r);padding:25px;margin-top:20px">';
+  html += '<h3 style="margin-bottom:15px">📦 Import Orders from CSV</h3>';
+  html += '<div class="upload-zone" onclick="document.getElementById(\'orders-csv-file\').click()">';
+  html += '<div style="font-size:48px;margin-bottom:10px">📦</div>';
+  html += '<div style="font-weight:600;margin-bottom:5px">Click to upload Orders CSV file</div>';
+  html += '<div style="font-size:13px;color:var(--txt3)">or drag and drop</div>';
+  html += '<input type="file" id="orders-csv-file" accept=".csv" style="display:none" onchange="handleOrdersCSV(this.files[0])">';
+  html += '</div>';
+  html += '<div style="margin-top:15px;font-size:12px;color:var(--txt3);line-height:1.8">';
+  html += '<strong>Orders CSV Format (columns in order):</strong><br>';
+  html += '<strong style="color:var(--oct)">Customer ID, Campaign Channel, Campaign Name, Quotation Order ID, Quotation Date, Sales Order ID, Sales Order Date, Product Type, Product Brand, Product Description, Payment Method, Order Quantity, Vendor, Order Status, Order Cost, Order Selling Price, Margin, Credit Duration, Sales Person</strong>';
+  html += '<br><br><strong>Campaign Channel:</strong> WhatsApp, Telesales, or Dashboard';
+  html += '<br><strong>Product Type:</strong> Lubes, Tires, or Batteries';
+  html += '<br><strong>Payment Method:</strong> Cash or Credit';
+  html += '<br><strong>Order Status:</strong> Quotation, Processed, Completed, or Cancelled';
+  html += '<br><strong>Date Formats:</strong> MM-DD-YYYY or M/D/YYYY';
   html += '</div></div>';
+  
+  html += '</div>';
   
   return html;
 }
@@ -1349,6 +1482,71 @@ function toast(msg, type) {
   t.textContent = msg;
   t.className = 'toast show' + (type ? ' ' + type : '');
   setTimeout(() => t.className = 'toast', 2800);
+}
+
+function handleOrdersCSV(file) {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    const lines = text.split('\n').filter(l => l.trim());
+    
+    if (lines.length < 2) {
+      toast('CSV file is empty', 'error');
+      return;
+    }
+    
+    let imported = 0;
+    let skipped = 0;
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      if (values.length < 15) continue;
+      
+      const order = {
+        customerId: values[0],
+        campaignChannel: values[1],
+        campaignName: values[2],
+        quotationId: values[3],
+        quotationDate: convertToISO(values[4]),
+        salesOrderId: values[5],
+        salesOrderDate: convertToISO(values[6]),
+        productType: values[7],
+        productBrand: values[8],
+        productDescription: values[9],
+        paymentMethod: values[10],
+        quantity: parseInt(values[11]) || 0,
+        vendor: values[12],
+        status: values[13],
+        cost: parseFloat(values[14]) || 0,
+        sellingPrice: parseFloat(values[15]) || 0,
+        margin: values[16] ? parseFloat(values[16]) : Math.round(((parseFloat(values[15]) - parseFloat(values[14])) / parseFloat(values[15])) * 100),
+        creditDuration: values[17] || '',
+        salesPerson: values[18] || '',
+        createdAt: new Date().toISOString()
+      };
+      
+      if (!order.customerId || !order.quotationId) {
+        skipped++;
+        continue;
+      }
+      
+      S.orders.push(order);
+      imported++;
+    }
+    
+    logActivity('Imported ' + imported + ' orders from CSV', '');
+    saveData();
+    
+    let message = 'Imported ' + imported + ' orders';
+    if (skipped > 0) message += ' (' + skipped + ' skipped)';
+    
+    toast(message, 'success');
+    go('orders');
+  };
+  
+  reader.readAsText(file);
 }
 
 // START
