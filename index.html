@@ -946,12 +946,19 @@ function openEdit(id) {
   const c = S.customers.find(x => x.id === id);
   if (!c) return;
   
+  const isAdmin = S.currentUser.id === 'admin' || S.currentUser.team === 'admin';
+  
   let html = '<div class="modal-title">Edit Customer</div>';
-  html += '<input type="hidden" id="edit-id" value="' + c.id + '">';
+  html += '<input type="hidden" id="edit-old-id" value="' + c.id + '">';
   
   html += '<div class="section-box">';
   html += '<div class="section-title">Customer Identification</div>';
-  html += '<div class="m-field"><label class="m-label">Customer ID</label><input class="m-input" value="' + c.id + '" disabled style="background:var(--surface2);cursor:not-allowed"></div>';
+  if (isAdmin) {
+    html += '<div class="m-field"><label class="m-label">Customer ID <span style="color:var(--oct);font-size:11px">(Admin Only)</span></label><input class="m-input" id="edit-customer-id" value="' + c.id + '"></div>';
+    html += '<div style="font-size:11px;color:var(--red);margin-top:-10px;margin-bottom:10px">⚠️ Changing Customer ID will update all linked orders. Use with caution!</div>';
+  } else {
+    html += '<div class="m-field"><label class="m-label">Customer ID</label><input class="m-input" value="' + c.id + '" disabled style="background:var(--surface2);cursor:not-allowed"></div>';
+  }
   html += '</div>';
   
   html += '<div class="section-box">';
@@ -1041,9 +1048,35 @@ function openEdit(id) {
 }
 
 function saveEdit() {
-  const id = document.getElementById('edit-id').value;
-  const c = S.customers.find(x => x.id === id);
+  const oldId = document.getElementById('edit-old-id').value;
+  const c = S.customers.find(x => x.id === oldId);
   if (!c) return;
+  
+  const isAdmin = S.currentUser.id === 'admin' || S.currentUser.team === 'admin';
+  
+  // Check if Customer ID was changed (admin only)
+  let newId = oldId;
+  if (isAdmin) {
+    const customerIdField = document.getElementById('edit-customer-id');
+    if (customerIdField) {
+      newId = customerIdField.value.trim();
+      
+      // Validate new ID is not empty
+      if (!newId) {
+        toast('Customer ID cannot be empty', 'error');
+        return;
+      }
+      
+      // Check if new ID already exists (and it's not the same customer)
+      if (newId !== oldId) {
+        const exists = S.customers.find(x => x.id === newId && x.id !== oldId);
+        if (exists) {
+          toast('Customer ID already exists! Please use a unique ID.', 'error');
+          return;
+        }
+      }
+    }
+  }
   
   const company = document.getElementById('edit-company').value.trim();
   const pname = document.getElementById('edit-pname').value.trim();
@@ -1054,8 +1087,19 @@ function saveEdit() {
     return;
   }
   
-  const changes = [];
-  if (c.companyName !== company) changes.push('company name');
+  // If Customer ID changed, update it and all linked orders
+  if (newId !== oldId) {
+    c.id = newId;
+    
+    // Update all orders with this customer ID
+    S.orders.forEach(o => {
+      if (o.customerId === oldId) {
+        o.customerId = newId;
+      }
+    });
+    
+    logActivity('Changed Customer ID from ' + oldId + ' to ' + newId, company);
+  }
   
   c.companyName = company;
   c.city = document.getElementById('edit-city').value.trim();
