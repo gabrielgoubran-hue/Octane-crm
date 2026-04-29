@@ -123,9 +123,31 @@ const S = {
   users: [{id: 'admin', name: 'Admin User', team: 'admin'}],
   activityLogs: [],
   expandedId: null,
+  expandedCampaign: null, // For campaign expand
+  expandedOrder: null, // For order expand
   currentUser: {id: 'admin', name: 'Admin User'},
   fSearch: '',
-  fStatus: ''
+  fStatus: '',
+  fFuelActivity: '',
+  fOstoreActivity: '',
+  fFuelAM: '',
+  fOstoreAM: '',
+  // Campaign filters
+  cSearch: '',
+  cType: '',
+  cDateFrom: '',
+  cDateTo: '',
+  // Order filters
+  oSearch: '',
+  oDateFrom: '',
+  oDateTo: '',
+  oPaymentMethod: '',
+  oProductBrand: '',
+  oStatus: '',
+  oProductType: '',
+  oSalesPerson: '',
+  oCampaignName: '',
+  oCampaignType: ''
 };
 
 const STATUSES = ['Called','Answered','Not answered','Interested','Meeting scheduled','Meeting done','Offer sent','Offer accepted','Offer rejected'];
@@ -274,16 +296,16 @@ function renderAccounts() {
     const lastCampaign = c.lastOutboundCampaign || '—';
     const interest = c.whatsappInterested || c.telesalesInterested || c.dashboardInterested || '—';
     
-    // Calculate revenue for this customer
+    // Calculate sales for this customer
     const customerOrders = S.orders.filter(o => o.customerId === c.id);
-    const revenue = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+    const sales = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
     
     let html = '<tr onclick="toggleExpand(\'' + c.id + '\')">';
     html += '<td><div style="font-weight:600;font-size:13px">' + c.companyName + '</div>';
     html += '<div style="font-size:11px;color:var(--txt3)">' + (c.primaryContactName || '') + '</div></td>';
     html += '<td style="font-size:12px;color:var(--txt2)">' + (c.city || '') + '</td>';
     html += '<td style="font-weight:600;color:var(--oct)">' + (c.fleetSize || 0) + '</td>';
-    html += '<td style="font-weight:700;color:' + (revenue > 0 ? 'var(--green)' : 'var(--txt3)') + '">$' + (revenue > 0 ? revenue.toLocaleString() : '0') + '</td>';
+    html += '<td style="font-weight:700;color:' + (sales > 0 ? 'var(--green)' : 'var(--txt3)') + '">$' + (sales > 0 ? sales.toLocaleString() : '0') + '</td>';
     html += '<td><span class="badge ' + (c.fuelActive ? 'b-active' : 'b-inactive') + '">' + (c.fuelActive ? 'Active' : 'Inactive') + '</span></td>';
     html += '<td><span class="badge ' + (c.ostoreActive ? 'b-active' : 'b-inactive') + '">' + (c.ostoreActive ? 'Active' : 'Inactive') + '</span></td>';
     html += '<td>' + (c.ostoreStatus ? '<span class="badge">' + c.ostoreStatus + '</span>' : '—') + '</td>';
@@ -301,7 +323,7 @@ function renderAccounts() {
   }).join('');
   
   // Calculate totals
-  const totalRevenue = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+  const totalSales = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
   
   let html = '<div>';
   html += '<div class="page-head">';
@@ -318,19 +340,38 @@ function renderAccounts() {
   html += '<div class="stat"><div class="stat-lbl">Campaign Offers</div><div class="stat-val" style="color:var(--blue)">' + campaignOffers + '</div><div class="stat-sub">Total sent</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Leads Generated</div><div class="stat-val" style="color:var(--green)">' + leadsGenerated + '</div><div class="stat-sub">From campaigns</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Converted</div><div class="stat-val" style="color:var(--oct)">' + convertedCustomers + '</div><div class="stat-sub">Offer accepted</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Total Revenue</div><div class="stat-val" style="color:var(--green)">$' + totalRevenue.toLocaleString() + '</div><div class="stat-sub">All orders</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Total Sales</div><div class="stat-val" style="color:var(--green)">$' + totalSales.toLocaleString() + '</div><div class="stat-sub">All orders</div></div>';
   html += '</div>';
   
   html += '<div class="fbar">';
-  html += '<input type="text" placeholder="Search company, contact, city, phone…" value="' + S.fSearch + '" oninput="S.fSearch=this.value;render()">';
+  html += '<input type="text" id="search-input" placeholder="Search company, contact, city, phone, customer ID, campaign…" value="' + S.fSearch + '" oninput="handleSearch(this.value)">';
   html += '<select onchange="S.fStatus=this.value;render()"><option value="">All statuses</option>';
   STATUSES.forEach(s => {
     html += '<option value="' + s + '"' + (S.fStatus === s ? ' selected' : '') + '>' + s + '</option>';
   });
-  html += '</select></div>';
+  html += '</select>';
+  html += '<select onchange="S.fFuelActivity=this.value;render()"><option value="">Fuel: All</option><option value="Active"' + (S.fFuelActivity === 'Active' ? ' selected' : '') + '>Fuel: Active</option><option value="Inactive"' + (S.fFuelActivity === 'Inactive' ? ' selected' : '') + '>Fuel: Inactive</option></select>';
+  html += '<select onchange="S.fOstoreActivity=this.value;render()"><option value="">O-store: All</option><option value="Active"' + (S.fOstoreActivity === 'Active' ? ' selected' : '') + '>O-store: Active</option><option value="Inactive"' + (S.fOstoreActivity === 'Inactive' ? ' selected' : '') + '>O-store: Inactive</option></select>';
+  
+  // Get unique Fuel AMs
+  const fuelAMs = [...new Set(S.customers.map(c => c.fuelAM).filter(Boolean))].sort();
+  html += '<select onchange="S.fFuelAM=this.value;render()"><option value="">All Fuel AMs</option>';
+  fuelAMs.forEach(am => {
+    html += '<option value="' + am + '"' + (S.fFuelAM === am ? ' selected' : '') + '>' + am + '</option>';
+  });
+  html += '</select>';
+  
+  // Get unique O-store AMs
+  const ostoreAMs = [...new Set(S.customers.map(c => c.ostoreAM).filter(Boolean))].sort();
+  html += '<select onchange="S.fOstoreAM=this.value;render()"><option value="">All O-store AMs</option>';
+  ostoreAMs.forEach(am => {
+    html += '<option value="' + am + '"' + (S.fOstoreAM === am ? ' selected' : '') + '>' + am + '</option>';
+  });
+  html += '</select>';
+  html += '</div>';
   
   html += '<div class="tbl-wrap"><table class="tbl">';
-  html += '<thead><tr><th>Company</th><th>City</th><th>Fleet Size</th><th>Revenue</th><th>Fuel Activity</th><th>O-store Activity</th><th>Status</th><th>Hitlist</th><th>Last Campaign</th><th>Interest</th><th></th></tr></thead>';
+  html += '<thead><tr><th>Company</th><th>City</th><th>Fleet Size</th><th>Sales</th><th>Fuel Activity</th><th>O-store Activity</th><th>Status</th><th>Hitlist</th><th>Last Campaign</th><th>Interest</th><th></th></tr></thead>';
   html += '<tbody>' + (rows || '<tr><td colspan="11"><div class="empty">No customers found</div></td></tr>') + '</tbody>';
   html += '</table></div></div>';
   
@@ -352,12 +393,12 @@ function renderExpand(c) {
   // Order Summary
   const customerOrders = S.orders.filter(o => o.customerId === c.id);
   if (customerOrders.length > 0) {
-    const totalRevenue = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+    const totalSales = customerOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
     html += '<div style="margin-top:15px;padding:15px;background:var(--green-l);border:1px solid var(--green);border-radius:var(--r)">';
     html += '<div style="font-weight:700;color:var(--green);margin-bottom:8px">📦 Orders Summary</div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:13px">';
     html += '<div><span style="color:var(--txt3)">Total Orders:</span> <strong>' + customerOrders.length + '</strong></div>';
-    html += '<div><span style="color:var(--txt3)">Total Revenue:</span> <strong>$' + totalRevenue.toLocaleString() + '</strong></div>';
+    html += '<div><span style="color:var(--txt3)">Total Sales:</span> <strong>$' + totalSales.toLocaleString() + '</strong></div>';
     html += '<div><span style="color:var(--txt3)">Completed:</span> <strong>' + customerOrders.filter(o => o.status === 'Completed').length + '</strong></div>';
     html += '</div></div>';
   }
@@ -405,21 +446,54 @@ function renderExpand(c) {
 
 function getVisible() {
   let list = S.customers;
+  
+  // Enhanced search: Company, Contact, City, Phone, Customer ID, Campaign Name
   if (S.fSearch) {
     const q = S.fSearch.toLowerCase();
     list = list.filter(c => 
       c.companyName.toLowerCase().includes(q) ||
       (c.primaryContactName && c.primaryContactName.toLowerCase().includes(q)) ||
       (c.city && c.city.toLowerCase().includes(q)) ||
-      (c.primaryContactPhone && c.primaryContactPhone.includes(q))
+      (c.primaryContactPhone && c.primaryContactPhone.includes(q)) ||
+      (c.id && c.id.toLowerCase().includes(q)) || // Customer ID
+      (c.whatsappCampaign && c.whatsappCampaign.toLowerCase().includes(q)) || // Campaign names
+      (c.telesalesCampaign && c.telesalesCampaign.toLowerCase().includes(q)) ||
+      (c.dashboardCampaign && c.dashboardCampaign.toLowerCase().includes(q))
     );
   }
+  
+  // Filter by status
   if (S.fStatus) list = list.filter(c => c.ostoreStatus === S.fStatus);
+  
+  // Filter by Fuel Activity
+  if (S.fFuelActivity === 'Active') list = list.filter(c => c.fuelActive === true);
+  if (S.fFuelActivity === 'Inactive') list = list.filter(c => c.fuelActive === false);
+  
+  // Filter by O-store Activity
+  if (S.fOstoreActivity === 'Active') list = list.filter(c => c.ostoreActive === true);
+  if (S.fOstoreActivity === 'Inactive') list = list.filter(c => c.ostoreActive === false);
+  
+  // Filter by Fuel AM
+  if (S.fFuelAM) list = list.filter(c => c.fuelAM === S.fFuelAM);
+  
+  // Filter by O-store AM
+  if (S.fOstoreAM) list = list.filter(c => c.ostoreAM === S.fOstoreAM);
+  
   return list;
 }
 
 function toggleExpand(id) {
   S.expandedId = S.expandedId === id ? null : id;
+  render();
+}
+
+function toggleCampaignExpand(key) {
+  S.expandedCampaign = S.expandedCampaign === key ? null : key;
+  render();
+}
+
+function toggleOrderExpand(id) {
+  S.expandedOrder = S.expandedOrder === id ? null : id;
   render();
 }
 
@@ -530,16 +604,78 @@ function renderCampaigns() {
     return a.name.localeCompare(b.name);
   });
   
-  // Separate current and historical
-  const currentCampaigns = campaigns.filter(c => !c.isHistorical);
-  const historicalCampaigns = campaigns.filter(c => c.isHistorical);
+  // Auto-archive campaigns with zero pending
+  campaigns.forEach(c => {
+    if (c.pending === 0 && !c.isHistorical) {
+      c.isHistorical = true; // Auto-move to historical when all responded
+    }
+  });
   
-  // Calculate totals
-  const totalCampaigns = campaigns.length;
-  const totalReach = campaigns.reduce((sum, c) => sum + c.customers.length, 0);
-  const totalInterested = campaigns.reduce((sum, c) => sum + c.interested, 0);
-  const totalNotInterested = campaigns.reduce((sum, c) => sum + c.notInterested, 0);
-  const totalPending = campaigns.reduce((sum, c) => sum + c.pending, 0);
+  // Apply search filters
+  let filteredCampaigns = campaigns;
+  
+  // Filter by search (company name, customer name, customer ID, O-store AM)
+  if (S.cSearch) {
+    const q = S.cSearch.toLowerCase();
+    filteredCampaigns = filteredCampaigns.filter(campaign => {
+      // Check if any customer in this campaign matches the search
+      return S.customers.some(customer => {
+        const inCampaign = (
+          (campaign.type === 'WhatsApp' && customer.whatsappCampaign === campaign.name) ||
+          (campaign.type === 'Telesales' && customer.telesalesCampaign === campaign.name) ||
+          (campaign.type === 'Dashboard' && customer.dashboardCampaign === campaign.name) ||
+          (campaign.isHistorical && customer.campaignHistory && customer.campaignHistory.some(h => h.type === campaign.type && h.name === campaign.name))
+        );
+        
+        if (!inCampaign) return false;
+        
+        return (
+          customer.companyName.toLowerCase().includes(q) ||
+          (customer.primaryContactName && customer.primaryContactName.toLowerCase().includes(q)) ||
+          (customer.id && customer.id.toLowerCase().includes(q)) ||
+          (customer.ostoreAM && customer.ostoreAM.toLowerCase().includes(q))
+        );
+      });
+    });
+  }
+  
+  // Filter by campaign type
+  if (S.cType) {
+    filteredCampaigns = filteredCampaigns.filter(c => c.type === S.cType);
+  }
+  
+  // Filter by date range
+  if (S.cDateFrom || S.cDateTo) {
+    filteredCampaigns = filteredCampaigns.filter(c => {
+      if (!c.dates || c.dates.length === 0) return false;
+      return c.dates.some(date => {
+        const campaignDate = new Date(date);
+        if (S.cDateFrom && campaignDate < new Date(S.cDateFrom)) return false;
+        if (S.cDateTo && campaignDate > new Date(S.cDateTo)) return false;
+        return true;
+      });
+    });
+  }
+  
+  // Separate current and historical from filtered list
+  const currentCampaigns = filteredCampaigns.filter(c => !c.isHistorical);
+  const historicalCampaigns = filteredCampaigns.filter(c => c.isHistorical);
+  
+  // Calculate totals from filtered campaigns
+  const totalCampaigns = filteredCampaigns.length;
+  const totalReach = filteredCampaigns.reduce((sum, c) => sum + c.customers.length, 0);
+  const totalInterested = filteredCampaigns.reduce((sum, c) => sum + c.interested, 0);
+  const totalNotInterested = filteredCampaigns.reduce((sum, c) => sum + c.notInterested, 0);
+  const totalPending = filteredCampaigns.reduce((sum, c) => sum + c.pending, 0);
+  
+  // Calculate orders analytics for campaigns
+  const campaignOrders = S.orders.filter(o => {
+    return filteredCampaigns.some(c => 
+      c.type === o.campaignChannel && c.name === o.campaignName
+    );
+  });
+  const totalCampaignOrders = campaignOrders.length;
+  const totalCampaignRevenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
   
   let html = '<div>';
   html += '<div class="page-head">';
@@ -555,12 +691,26 @@ function renderCampaigns() {
   html += '<div class="stat"><div class="stat-lbl">Pending</div><div class="stat-val" style="color:var(--txt3)">' + totalPending + '</div><div class="stat-sub">' + (totalReach > 0 ? Math.round(totalPending / totalReach * 100) : 0) + '% awaiting</div></div>';
   html += '</div>';
   
+  html += '<div class="stat-row">';
+  html += '<div class="stat"><div class="stat-lbl">Total Orders</div><div class="stat-val" style="color:var(--blue)">' + totalCampaignOrders + '</div><div class="stat-sub">From campaigns</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Campaign Sales</div><div class="stat-val" style="color:var(--green)">$' + totalCampaignRevenue.toLocaleString() + '</div><div class="stat-sub">Total revenue</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Avg per Campaign</div><div class="stat-val" style="color:var(--oct)">$' + (totalCampaigns > 0 ? Math.round(totalCampaignRevenue / totalCampaigns).toLocaleString() : '0') + '</div><div class="stat-sub">Revenue average</div></div>';
+  html += '</div>';
+  
+  // Search and Filters
+  html += '<div class="fbar">';
+  html += '<input type="text" placeholder="Search company, customer, ID, O-store AM…" value="' + S.cSearch + '" oninput="S.cSearch=this.value;render()">';
+  html += '<select onchange="S.cType=this.value;render()"><option value="">All Types</option><option value="WhatsApp"' + (S.cType === 'WhatsApp' ? ' selected' : '') + '>WhatsApp</option><option value="Telesales"' + (S.cType === 'Telesales' ? ' selected' : '') + '>Telesales</option><option value="Dashboard"' + (S.cType === 'Dashboard' ? ' selected' : '') + '>Dashboard</option></select>';
+  html += '<input type="date" placeholder="From Date" value="' + S.cDateFrom + '" onchange="S.cDateFrom=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
+  html += '<input type="date" placeholder="To Date" value="' + S.cDateTo + '" onchange="S.cDateTo=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
+  html += '</div>';
+  
   // Current Campaigns Section
   if (currentCampaigns.length > 0) {
     html += '<div style="margin-top:25px;margin-bottom:15px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">🚀 Active Campaigns (' + currentCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th><th>Action</th></tr></thead>';
+    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Orders</th><th>Sales</th><th>$/Customer</th><th>Success Rate</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
     currentCampaigns.forEach(c => {
@@ -569,21 +719,64 @@ function renderCampaigns() {
       const total = c.customers.length;
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
+      // Calculate orders and revenue for this campaign
+      const campaignOrders = S.orders.filter(o => o.campaignChannel === c.type && o.campaignName === c.name);
+      const orderCount = campaignOrders.length;
+      const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+      const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
+      
       // Sort dates and format
       const sortedDates = c.dates.sort((a, b) => new Date(b) - new Date(a));
       const dateDisplay = sortedDates.length > 0 ? sortedDates.map(d => convertToUS(d)).join(', ') : '—';
       
-      html += '<tr>';
+      const campaignKey = c.type + '|' + c.name;
+      const isExpanded = S.expandedCampaign === campaignKey;
+      
+      html += '<tr onclick="toggleCampaignExpand(\'' + campaignKey.replace(/'/g, "\\'") + '\')" style="cursor:pointer">';
       html += '<td><div style="font-weight:600;font-size:13px">' + c.name + '</div></td>';
       html += '<td><span style="color:' + typeColor + ';font-weight:600">' + typeIcon + ' ' + c.type + '</span></td>';
       html += '<td style="font-size:12px">' + dateDisplay + '</td>';
       html += '<td style="font-weight:600">' + total + '</td>';
       html += '<td><span style="color:var(--green);font-weight:600">' + c.interested + '</span></td>';
-      html += '<td><span style="color:var(--red);font-weight:600">' + c.notInterested + '</span></td>';
-      html += '<td><span style="color:var(--txt3);font-weight:600">' + c.pending + '</span></td>';
+      html += '<td><span style="font-weight:600;color:var(--blue)">' + orderCount + '</span></td>';
+      html += '<td><span style="font-weight:600;color:var(--green)">$' + revenue.toLocaleString() + '</span></td>';
+      html += '<td style="font-size:13px;color:var(--oct)">$' + revenuePerCustomer.toLocaleString() + '</td>';
       html += '<td><div style="font-weight:700;font-size:14px;color:' + (successRate >= 50 ? 'var(--green)' : successRate >= 25 ? 'var(--oct)' : 'var(--red)') + '">' + successRate + '%</div></td>';
-      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="event.stopPropagation();deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
       html += '</tr>';
+      
+      if (isExpanded) {
+        html += '<tr><td colspan="10" style="padding:0"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
+        html += '<div style="font-weight:700;margin-bottom:15px;font-size:15px">📊 Campaign Details: ' + c.name + '</div>';
+        
+        // Campaign metrics
+        html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:20px">';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">TOTAL REACH</div><div style="font-size:20px;font-weight:700">' + total + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">ORDERS CLOSED</div><div style="font-size:20px;font-weight:700;color:var(--blue)">' + orderCount + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">TOTAL SALES</div><div style="font-size:20px;font-weight:700;color:var(--green)">$' + revenue.toLocaleString() + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">CONVERSION RATE</div><div style="font-size:20px;font-weight:700;color:var(--oct)">' + (total > 0 ? Math.round((orderCount / total) * 100) : 0) + '%</div></div>';
+        html += '</div>';
+        
+        // Orders from this campaign
+        if (campaignOrders.length > 0) {
+          html += '<div style="margin-bottom:15px"><strong>Orders (' + orderCount + '):</strong></div>';
+          html += '<div style="max-height:200px;overflow-y:auto">';
+          campaignOrders.forEach(order => {
+            const customer = S.customers.find(cust => cust.id === order.customerId);
+            html += '<div style="background:var(--surface);padding:10px;margin-bottom:8px;border-radius:6px;border-left:3px solid var(--green)">';
+            html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px">';
+            html += '<div style="font-weight:600">' + (customer ? customer.companyName : order.customerId) + '</div>';
+            html += '<div style="color:var(--green);font-weight:700">$' + (parseFloat(order.sellingPrice) || 0).toLocaleString() + '</div>';
+            html += '</div>';
+            html += '<div style="font-size:12px;color:var(--txt3)">' + order.productType + ' - ' + order.productBrand + ' (' + order.quantity + ' units)</div>';
+            html += '<div style="font-size:11px;color:var(--txt2);margin-top:4px">Order: ' + order.salesOrderId + ' | Status: ' + order.status + '</div>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        html += '</div></td></tr>';
+      }
     });
     
     html += '</tbody></table></div></div>';
@@ -594,7 +787,7 @@ function renderCampaigns() {
     html += '<div style="margin-top:25px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">📜 Historical Campaigns (' + historicalCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Not Interested</th><th>Pending</th><th>Success Rate</th><th>Action</th></tr></thead>';
+    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Orders</th><th>Sales</th><th>$/Customer</th><th>Success Rate</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
     historicalCampaigns.forEach(c => {
@@ -603,21 +796,62 @@ function renderCampaigns() {
       const total = c.customers.length;
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
+      // Calculate orders and revenue for this campaign
+      const campaignOrders = S.orders.filter(o => o.campaignChannel === c.type && o.campaignName === c.name);
+      const orderCount = campaignOrders.length;
+      const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+      const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
+      
       // Sort dates and format
       const sortedDates = c.dates.sort((a, b) => new Date(b) - new Date(a));
       const dateDisplay = sortedDates.length > 0 ? sortedDates.map(d => convertToUS(d)).join(', ') : '—';
       
-      html += '<tr style="opacity:0.7">';
+      const campaignKey = c.type + '|' + c.name;
+      const isExpanded = S.expandedCampaign === campaignKey;
+      
+      html += '<tr onclick="toggleCampaignExpand(\'' + campaignKey.replace(/'/g, "\\'") + '\')" style="opacity:0.7;cursor:pointer">';
       html += '<td><div style="font-size:13px">' + c.name + '</div></td>';
       html += '<td><span style="color:' + typeColor + ';font-weight:600">' + typeIcon + ' ' + c.type + '</span></td>';
       html += '<td style="font-size:12px">' + dateDisplay + '</td>';
       html += '<td>' + total + '</td>';
       html += '<td><span style="color:var(--green)">' + c.interested + '</span></td>';
-      html += '<td><span style="color:var(--red)">' + c.notInterested + '</span></td>';
-      html += '<td><span style="color:var(--txt3)">' + c.pending + '</span></td>';
+      html += '<td><span style="font-weight:600;color:var(--blue);opacity:1">' + orderCount + '</span></td>';
+      html += '<td><span style="font-weight:600;color:var(--green);opacity:1">$' + revenue.toLocaleString() + '</span></td>';
+      html += '<td style="font-size:13px;color:var(--oct);opacity:1">$' + revenuePerCustomer.toLocaleString() + '</td>';
       html += '<td><div style="font-size:14px;color:' + (successRate >= 50 ? 'var(--green)' : successRate >= 25 ? 'var(--oct)' : 'var(--red)') + '">' + successRate + '%</div></td>';
-      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white;opacity:1" onclick="deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white;opacity:1" onclick="event.stopPropagation();deleteCampaign(\'' + c.type + '\', \'' + c.name.replace(/'/g, "\\'") + '\')">🗑️ Delete</button></td>';
       html += '</tr>';
+      
+      if (isExpanded) {
+        html += '<tr><td colspan="10" style="padding:0;opacity:1"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
+        html += '<div style="font-weight:700;margin-bottom:15px;font-size:15px">📊 Campaign Details: ' + c.name + ' (Historical)</div>';
+        
+        html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:20px">';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">TOTAL REACH</div><div style="font-size:20px;font-weight:700">' + total + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">ORDERS CLOSED</div><div style="font-size:20px;font-weight:700;color:var(--blue)">' + orderCount + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">TOTAL SALES</div><div style="font-size:20px;font-weight:700;color:var(--green)">$' + revenue.toLocaleString() + '</div></div>';
+        html += '<div style="background:var(--surface);padding:12px;border-radius:6px"><div style="font-size:11px;color:var(--txt3);margin-bottom:4px">CONVERSION RATE</div><div style="font-size:20px;font-weight:700;color:var(--oct)">' + (total > 0 ? Math.round((orderCount / total) * 100) : 0) + '%</div></div>';
+        html += '</div>';
+        
+        if (campaignOrders.length > 0) {
+          html += '<div style="margin-bottom:15px"><strong>Orders (' + orderCount + '):</strong></div>';
+          html += '<div style="max-height:200px;overflow-y:auto">';
+          campaignOrders.forEach(order => {
+            const customer = S.customers.find(cust => cust.id === order.customerId);
+            html += '<div style="background:var(--surface);padding:10px;margin-bottom:8px;border-radius:6px;border-left:3px solid var(--green)">';
+            html += '<div style="display:flex;justify-content:space-between;margin-bottom:4px">';
+            html += '<div style="font-weight:600">' + (customer ? customer.companyName : order.customerId) + '</div>';
+            html += '<div style="color:var(--green);font-weight:700">$' + (parseFloat(order.sellingPrice) || 0).toLocaleString() + '</div>';
+            html += '</div>';
+            html += '<div style="font-size:12px;color:var(--txt3)">' + order.productType + ' - ' + order.productBrand + ' (' + order.quantity + ' units)</div>';
+            html += '<div style="font-size:11px;color:var(--txt2);margin-top:4px">Order: ' + order.salesOrderId + ' | Status: ' + order.status + '</div>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        html += '</div></td></tr>';
+      }
     });
     
     html += '</tbody></table></div></div>';
@@ -634,9 +868,10 @@ function renderCampaigns() {
 // ORDERS PAGE
 function renderOrders() {
   const totalOrders = S.orders.length;
-  const totalRevenue = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+  const totalSales = S.orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
   const totalCost = S.orders.reduce((sum, o) => sum + (parseFloat(o.cost) || 0), 0);
-  const avgMargin = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 0;
+  const totalRevenue = totalSales - totalCost; // Revenue = Profit (Sales - Cost)
+  const avgMargin = totalSales > 0 ? Math.round((totalRevenue / totalSales) * 100) : 0;
   
   // Unique customers who ordered
   const uniqueCustomers = new Set(S.orders.map(o => o.customerId)).size;
@@ -647,10 +882,10 @@ function renderOrders() {
   const completed = S.orders.filter(o => o.status === 'Completed').length;
   const cancelled = S.orders.filter(o => o.status === 'Cancelled').length;
   
-  // Revenue by product type
-  const lubesRevenue = S.orders.filter(o => o.productType === 'Lubes').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
-  const tiresRevenue = S.orders.filter(o => o.productType === 'Tires').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
-  const batteriesRevenue = S.orders.filter(o => o.productType === 'Batteries').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  // Sales by product type (not revenue, these are sales)
+  const lubesSales = S.orders.filter(o => o.productType === 'Lubes').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  const tiresSales = S.orders.filter(o => o.productType === 'Tires').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
+  const batteriesSales = S.orders.filter(o => o.productType === 'Batteries').reduce((s, o) => s + (parseFloat(o.sellingPrice) || 0), 0);
   
   let html = '<div>';
   html += '<div class="page-head">';
@@ -661,40 +896,138 @@ function renderOrders() {
   // Stats
   html += '<div class="stat-row">';
   html += '<div class="stat"><div class="stat-lbl">Total Orders</div><div class="stat-val" style="color:var(--blue)">' + totalOrders + '</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Total Revenue</div><div class="stat-val" style="color:var(--green)">$' + totalRevenue.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Total Sales</div><div class="stat-val" style="color:var(--green)">$' + totalSales.toLocaleString() + '</div><div class="stat-sub">Selling price</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Total Revenue</div><div class="stat-val" style="color:var(--oct)">$' + totalRevenue.toLocaleString() + '</div><div class="stat-sub">Profit earned</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Avg Margin</div><div class="stat-val" style="color:var(--oct)">' + avgMargin + '%</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Customers Ordered</div><div class="stat-val" style="color:var(--oct)">' + uniqueCustomers + '</div><div class="stat-sub">Unique customers</div></div>';
   html += '</div>';
   
   html += '<div class="stat-row">';
+  html += '<div class="stat"><div class="stat-lbl">Customers Ordered</div><div class="stat-val" style="color:var(--blue)">' + uniqueCustomers + '</div><div class="stat-sub">Unique customers</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Quotation</div><div class="stat-val" style="color:var(--txt3)">' + quotations + '</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Processed</div><div class="stat-val" style="color:var(--blue)">' + processed + '</div></div>';
   html += '<div class="stat"><div class="stat-lbl">Completed</div><div class="stat-val" style="color:var(--green)">' + completed + '</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Cancelled</div><div class="stat-val" style="color:var(--red)">' + cancelled + '</div></div>';
   html += '</div>';
   
   html += '<div class="stat-row">';
-  html += '<div class="stat"><div class="stat-lbl">Lubes Revenue</div><div class="stat-val" style="color:#0ea5e9">$' + lubesRevenue.toLocaleString() + '</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Tires Revenue</div><div class="stat-val" style="color:#8b5cf6">$' + tiresRevenue.toLocaleString() + '</div></div>';
-  html += '<div class="stat"><div class="stat-lbl">Batteries Revenue</div><div class="stat-val" style="color:#f59e0b">$' + batteriesRevenue.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Cancelled</div><div class="stat-val" style="color:var(--red)">' + cancelled + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Lubes Sales</div><div class="stat-val" style="color:#0ea5e9">$' + lubesSales.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Tires Sales</div><div class="stat-val" style="color:#8b5cf6">$' + tiresSales.toLocaleString() + '</div></div>';
+  html += '<div class="stat"><div class="stat-lbl">Batteries Sales</div><div class="stat-val" style="color:#f59e0b">$' + batteriesSales.toLocaleString() + '</div></div>';
   html += '</div>';
   
+  // Search and Filters
+  html += '<div class="fbar" style="margin-top:20px">';
+  html += '<input type="text" placeholder="Search customer ID, name, product, sales order ID…" value="' + S.oSearch + '" oninput="S.oSearch=this.value;render()">';
+  
+  // Get unique values for dropdowns
+  const paymentMethods = [...new Set(S.orders.map(o => o.paymentMethod).filter(Boolean))].sort();
+  const productBrands = [...new Set(S.orders.map(o => o.productBrand).filter(Boolean))].sort();
+  const orderStatuses = [...new Set(S.orders.map(o => o.status).filter(Boolean))].sort();
+  const productTypes = [...new Set(S.orders.map(o => o.productType).filter(Boolean))].sort();
+  const salesPersons = [...new Set(S.orders.map(o => o.salesPerson).filter(Boolean))].sort();
+  const campaignNames = [...new Set(S.orders.map(o => o.campaignName).filter(Boolean))].sort();
+  
+  html += '<select onchange="S.oStatus=this.value;render()"><option value="">All Status</option>';
+  orderStatuses.forEach(s => html += '<option value="' + s + '"' + (S.oStatus === s ? ' selected' : '') + '>' + s + '</option>');
+  html += '</select>';
+  
+  html += '<select onchange="S.oProductType=this.value;render()"><option value="">All Products</option>';
+  productTypes.forEach(p => html += '<option value="' + p + '"' + (S.oProductType === p ? ' selected' : '') + '>' + p + '</option>');
+  html += '</select>';
+  
+  html += '<select onchange="S.oPaymentMethod=this.value;render()"><option value="">All Payment</option>';
+  paymentMethods.forEach(pm => html += '<option value="' + pm + '"' + (S.oPaymentMethod === pm ? ' selected' : '') + '>' + pm + '</option>');
+  html += '</select>';
+  html += '</div>';
+  
+  html += '<div class="fbar">';
+  html += '<select onchange="S.oProductBrand=this.value;render()"><option value="">All Brands</option>';
+  productBrands.forEach(b => html += '<option value="' + b + '"' + (S.oProductBrand === b ? ' selected' : '') + '>' + b + '</option>');
+  html += '</select>';
+  
+  html += '<select onchange="S.oSalesPerson=this.value;render()"><option value="">All Sales Persons</option>';
+  salesPersons.forEach(sp => html += '<option value="' + sp + '"' + (S.oSalesPerson === sp ? ' selected' : '') + '>' + sp + '</option>');
+  html += '</select>';
+  
+  html += '<select onchange="S.oCampaignName=this.value;render()"><option value="">All Campaigns</option>';
+  campaignNames.forEach(cn => html += '<option value="' + cn + '"' + (S.oCampaignName === cn ? ' selected' : '') + '>' + cn + '</option>');
+  html += '</select>';
+  
+  html += '<select onchange="S.oCampaignType=this.value;render()"><option value="">All Types</option><option value="WhatsApp"' + (S.oCampaignType === 'WhatsApp' ? ' selected' : '') + '>WhatsApp</option><option value="Telesales"' + (S.oCampaignType === 'Telesales' ? ' selected' : '') + '>Telesales</option><option value="Dashboard"' + (S.oCampaignType === 'Dashboard' ? ' selected' : '') + '>Dashboard</option></select>';
+  html += '</div>';
+  
+  html += '<div class="fbar">';
+  html += '<input type="date" placeholder="From Date" value="' + S.oDateFrom + '" onchange="S.oDateFrom=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
+  html += '<input type="date" placeholder="To Date" value="' + S.oDateTo + '" onchange="S.oDateTo=this.value;render()" style="padding:10px 14px;border:1px solid var(--border);border-radius:var(--r);font-size:14px">';
+  html += '</div>';
+  
+  // Apply filters to orders
+  let filteredOrders = S.orders;
+  
+  // Search filter
+  if (S.oSearch) {
+    const q = S.oSearch.toLowerCase();
+    filteredOrders = filteredOrders.filter(o => {
+      const customer = S.customers.find(c => c.id === o.customerId);
+      const customerName = customer ? customer.companyName : '';
+      return (
+        (o.customerId && o.customerId.toLowerCase().includes(q)) ||
+        (customerName && customerName.toLowerCase().includes(q)) ||
+        (o.productDescription && o.productDescription.toLowerCase().includes(q)) ||
+        (o.salesOrderId && o.salesOrderId.toLowerCase().includes(q))
+      );
+    });
+  }
+  
+  // Status filter
+  if (S.oStatus) filteredOrders = filteredOrders.filter(o => o.status === S.oStatus);
+  
+  // Product Type filter
+  if (S.oProductType) filteredOrders = filteredOrders.filter(o => o.productType === S.oProductType);
+  
+  // Payment Method filter
+  if (S.oPaymentMethod) filteredOrders = filteredOrders.filter(o => o.paymentMethod === S.oPaymentMethod);
+  
+  // Product Brand filter
+  if (S.oProductBrand) filteredOrders = filteredOrders.filter(o => o.productBrand === S.oProductBrand);
+  
+  // Sales Person filter
+  if (S.oSalesPerson) filteredOrders = filteredOrders.filter(o => o.salesPerson === S.oSalesPerson);
+  
+  // Campaign Name filter
+  if (S.oCampaignName) filteredOrders = filteredOrders.filter(o => o.campaignName === S.oCampaignName);
+  
+  // Campaign Type filter
+  if (S.oCampaignType) filteredOrders = filteredOrders.filter(o => o.campaignChannel === S.oCampaignType);
+  
+  // Date range filter
+  if (S.oDateFrom || S.oDateTo) {
+    filteredOrders = filteredOrders.filter(o => {
+      if (!o.salesOrderDate) return false;
+      const orderDate = new Date(o.salesOrderDate);
+      if (S.oDateFrom && orderDate < new Date(S.oDateFrom)) return false;
+      if (S.oDateTo && orderDate > new Date(S.oDateTo)) return false;
+      return true;
+    });
+  }
+  
   // Orders table
-  if (totalOrders > 0) {
+  if (filteredOrders.length > 0) {
     html += '<div style="margin-top:25px">';
-    html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">All Orders</h3>';
+    html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">All Orders (' + filteredOrders.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Quotation ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th><th>Action</th></tr></thead>';
+    html += '<thead><tr><th>Sales Order ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th><th>Action</th></tr></thead>';
     html += '<tbody>';
     
-    S.orders.forEach(o => {
+    filteredOrders.forEach(o => {
       const customer = S.customers.find(c => c.id === o.customerId);
       const customerName = customer ? customer.companyName : o.customerId;
       const margin = o.sellingPrice && o.cost ? Math.round(((o.sellingPrice - o.cost) / o.sellingPrice) * 100) : 0;
       const statusColor = o.status === 'Completed' ? 'var(--green)' : o.status === 'Cancelled' ? 'var(--red)' : o.status === 'Processed' ? 'var(--blue)' : 'var(--txt3)';
+      const isExpanded = S.expandedOrder === o.salesOrderId;
       
-      html += '<tr>';
-      html += '<td style="font-weight:600;font-size:13px">' + (o.quotationId || '—') + '</td>';
+      html += '<tr onclick="toggleOrderExpand(\'' + (o.salesOrderId || '').replace(/'/g, "\\'") + '\')" style="cursor:pointer">';
+      html += '<td style="font-weight:600;font-size:13px">' + (o.salesOrderId || '—') + '</td>';
       html += '<td>' + customerName + '</td>';
       html += '<td><div style="font-size:12px"><span style="color:' + (o.campaignChannel === 'WhatsApp' ? '#0ea5e9' : o.campaignChannel === 'Telesales' ? '#8b5cf6' : '#f59e0b') + '">' + (o.campaignChannel || '—') + '</span></div><div style="font-size:11px;color:var(--txt3)">' + (o.campaignName || '') + '</div></td>';
       html += '<td><div style="font-size:12px;font-weight:600">' + (o.productType || '—') + '</div><div style="font-size:11px;color:var(--txt3)">' + (o.productBrand || '') + '</div></td>';
@@ -703,8 +1036,58 @@ function renderOrders() {
       html += '<td style="font-weight:600;color:' + (margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--oct)' : 'var(--red)') + '">' + margin + '%</td>';
       html += '<td><span style="color:' + statusColor + ';font-weight:600">' + (o.status || '—') + '</span></td>';
       html += '<td style="font-size:12px">' + (o.salesPerson || '—') + '</td>';
-      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="deleteOrder(\'' + (o.quotationId || '').replace(/'/g, "\\'") + '\')">🗑️</button></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="event.stopPropagation();deleteOrder(\'' + (o.salesOrderId || '').replace(/'/g, "\\'") + '\')">🗑️</button></td>';
       html += '</tr>';
+      
+      if (isExpanded) {
+        html += '<tr><td colspan="10" style="padding:0"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
+        html += '<div style="font-weight:700;margin-bottom:15px;font-size:15px">📦 Order Details: ' + o.salesOrderId + '</div>';
+        
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">';
+        
+        // Left column
+        html += '<div>';
+        html += '<div style="background:var(--surface);padding:15px;border-radius:6px;margin-bottom:15px">';
+        html += '<div style="font-weight:700;margin-bottom:10px;color:var(--oct)">Customer & Campaign</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Customer:</span> <strong>' + customerName + '</strong> (' + o.customerId + ')</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Campaign:</span> <strong>' + (o.campaignChannel || '—') + '</strong> - ' + (o.campaignName || '—') + '</div>';
+        html += '<div><span style="color:var(--txt3)">Sales Person:</span> <strong>' + (o.salesPerson || '—') + '</strong></div>';
+        html += '</div>';
+        
+        html += '<div style="background:var(--surface);padding:15px;border-radius:6px">';
+        html += '<div style="font-weight:700;margin-bottom:10px;color:var(--oct)">Product Details</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Type:</span> <strong>' + (o.productType || '—') + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Brand:</span> <strong>' + (o.productBrand || '—') + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Description:</span> ' + (o.productDescription || '—') + '</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Quantity:</span> <strong>' + (o.quantity || 0) + '</strong> units</div>';
+        html += '<div><span style="color:var(--txt3)">Vendor:</span> ' + (o.vendor || '—') + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        // Right column
+        html += '<div>';
+        html += '<div style="background:var(--surface);padding:15px;border-radius:6px;margin-bottom:15px">';
+        html += '<div style="font-weight:700;margin-bottom:10px;color:var(--oct)">Financial Details</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Order Cost:</span> <strong>$' + (parseFloat(o.cost) || 0).toLocaleString() + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Selling Price:</span> <strong style="color:var(--green)">$' + (parseFloat(o.sellingPrice) || 0).toLocaleString() + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Profit:</span> <strong style="color:var(--oct)">$' + ((parseFloat(o.sellingPrice) || 0) - (parseFloat(o.cost) || 0)).toLocaleString() + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Margin:</span> <strong style="color:' + (margin >= 20 ? 'var(--green)' : 'var(--oct)') + '">' + margin + '%</strong></div>';
+        html += '<div><span style="color:var(--txt3)">Payment:</span> <strong>' + (o.paymentMethod || '—') + '</strong>' + (o.paymentMethod === 'Credit' ? ' (' + (o.creditDuration || '—') + ' days)' : '') + '</div>';
+        html += '</div>';
+        
+        html += '<div style="background:var(--surface);padding:15px;border-radius:6px">';
+        html += '<div style="font-weight:700;margin-bottom:10px;color:var(--oct)">Order Status</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Status:</span> <strong style="color:' + statusColor + '">' + (o.status || '—') + '</strong></div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Quotation ID:</span> ' + (o.quotationId || '—') + '</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Quotation Date:</span> ' + (o.quotationDate ? convertToUS(o.quotationDate) : '—') + '</div>';
+        html += '<div style="margin-bottom:6px"><span style="color:var(--txt3)">Sales Order ID:</span> <strong>' + (o.salesOrderId || '—') + '</strong></div>';
+        html += '<div><span style="color:var(--txt3)">Sales Order Date:</span> ' + (o.salesOrderDate ? convertToUS(o.salesOrderDate) : '—') + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '</div>';
+        html += '</div></td></tr>';
+      }
     });
     
     html += '</tbody></table></div></div>';
@@ -815,21 +1198,21 @@ function deleteCampaign(type, name) {
   toast('Campaign deleted from ' + removedCount + ' customers', 'success');
 }
 
-function deleteOrder(quotationId) {
-  if (!quotationId) return;
+function deleteOrder(salesOrderId) {
+  if (!salesOrderId) return;
   
-  const order = S.orders.find(o => o.quotationId === quotationId);
+  const order = S.orders.find(o => o.salesOrderId === salesOrderId);
   if (!order) return;
   
-  const message = 'Are you sure you want to delete order "' + quotationId + '"?\n\nCustomer: ' + order.customerId + '\nProduct: ' + order.productType + ' - ' + order.productBrand + '\nAmount: $' + (parseFloat(order.sellingPrice) || 0).toLocaleString() + '\n\nThis action cannot be undone!';
+  const message = 'Are you sure you want to delete order "' + salesOrderId + '"?\n\nCustomer: ' + order.customerId + '\nProduct: ' + order.productType + ' - ' + order.productBrand + '\nAmount: $' + (parseFloat(order.sellingPrice) || 0).toLocaleString() + '\n\nThis action cannot be undone!';
   
   if (!confirm(message)) return;
   
   // Remove order from array
-  const index = S.orders.findIndex(o => o.quotationId === quotationId);
+  const index = S.orders.findIndex(o => o.salesOrderId === salesOrderId);
   if (index !== -1) {
     S.orders.splice(index, 1);
-    logActivity('Deleted order', quotationId);
+    logActivity('Deleted order', salesOrderId);
     saveData();
     render();
     toast('Order deleted successfully', 'success');
@@ -1264,11 +1647,11 @@ function renderImport() {
   html += '<div style="font-weight:600;margin-bottom:10px;color:var(--blue)">Import Mode:</div>';
   html += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer">';
   html += '<input type="radio" name="orders-import-mode" value="insert" checked> ';
-  html += '<strong>Insert Only</strong> - Add new orders, skip existing Quotation IDs';
+  html += '<strong>Insert Only</strong> - Add new orders, skip existing Sales Order IDs';
   html += '</label>';
   html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">';
   html += '<input type="radio" name="orders-import-mode" value="update"> ';
-  html += '<strong>Update Only</strong> - Update existing orders, skip new Quotation IDs';
+  html += '<strong>Update Only</strong> - Update existing orders, skip new Sales Order IDs';
   html += '</label>';
   html += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">';
   html += '<input type="radio" name="orders-import-mode" value="upsert"> ';
@@ -1284,12 +1667,13 @@ function renderImport() {
   html += '</div>';
   html += '<div style="margin-top:15px;font-size:12px;color:var(--txt3);line-height:1.8">';
   html += '<strong>Orders CSV Format (columns in order):</strong><br>';
-  html += '<strong style="color:var(--oct)">Customer ID, Campaign Channel, Campaign Name, Quotation Order ID, Quotation Date, Sales Order ID, Sales Order Date, Product Type, Product Brand, Product Description, Payment Method, Order Quantity, Vendor, Order Status, Order Cost, Order Selling Price, Margin, Credit Duration, Sales Person</strong>';
+  html += '<strong style="color:var(--oct)">Customer ID, Campaign Channel, Campaign Name, Quotation Order ID, Quotation Date, Sales Order ID (UNIQUE), Sales Order Date, Product Type, Product Brand, Product Description, Payment Method, Order Quantity, Vendor, Order Status, Order Cost, Order Selling Price, Margin, Credit Duration, Sales Person</strong>';
   html += '<br><br><strong>Campaign Channel:</strong> WhatsApp, Telesales, or Dashboard';
   html += '<br><strong>Product Type:</strong> Lubes, Tires, or Batteries';
   html += '<br><strong>Payment Method:</strong> Cash or Credit';
   html += '<br><strong>Order Status:</strong> Quotation, Processed, Completed, or Cancelled';
   html += '<br><strong>Date Formats:</strong> MM-DD-YYYY or M/D/YYYY';
+  html += '<br><br><strong>Note:</strong> Sales Order ID is used as unique identifier for updates.';
   html += '</div></div>';
   
   html += '</div>';
@@ -1567,6 +1951,21 @@ function toast(msg, type) {
   setTimeout(() => t.className = 'toast', 2800);
 }
 
+function handleSearch(value) {
+  S.fSearch = value;
+  const content = document.getElementById('content');
+  const oldScroll = content.scrollTop;
+  render();
+  content.scrollTop = oldScroll;
+  // Restore focus to search input
+  const searchInput = document.getElementById('search-input');
+  if (searchInput && document.activeElement !== searchInput) {
+    searchInput.focus();
+    // Restore cursor position to end
+    searchInput.setSelectionRange(value.length, value.length);
+  }
+}
+
 function handleOrdersCSV(file) {
   if (!file) return;
   
@@ -1591,10 +1990,10 @@ function handleOrdersCSV(file) {
       const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
       if (values.length < 15) continue;
       
-      const quotationId = values[3];
+      const salesOrderId = values[5];
       
-      // Check if order already exists
-      const existingIndex = S.orders.findIndex(o => o.quotationId === quotationId);
+      // Check if order already exists (using Sales Order ID as unique identifier)
+      const existingIndex = S.orders.findIndex(o => o.salesOrderId === salesOrderId);
       const exists = existingIndex !== -1;
       
       // Handle based on mode
@@ -1623,9 +2022,9 @@ function handleOrdersCSV(file) {
         customerId: values[0],
         campaignChannel: values[1],
         campaignName: values[2],
-        quotationId: quotationId,
+        quotationId: values[3],
         quotationDate: convertToISO(values[4]),
-        salesOrderId: values[5],
+        salesOrderId: salesOrderId,
         salesOrderDate: convertToISO(values[6]),
         productType: values[7],
         productBrand: values[8],
@@ -1641,7 +2040,7 @@ function handleOrdersCSV(file) {
         salesPerson: values[18] || ''
       };
       
-      if (!order.customerId || !order.quotationId) {
+      if (!order.customerId || !order.salesOrderId) {
         skipped++;
         continue;
       }
