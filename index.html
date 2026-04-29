@@ -98,6 +98,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <button class="nb active" id="nav-accounts" onclick="go('accounts')">📋</button>
     <button class="nb" id="nav-campaigns" onclick="go('campaigns')">📢</button>
     <button class="nb" id="nav-orders" onclick="go('orders')">📦</button>
+    <button class="nb" id="nav-analysis" onclick="go('analysis')">📊</button>
     <button class="nb" id="nav-hitlist" onclick="go('hitlist')">🎯</button>
     <button class="nb" id="nav-logs" onclick="go('logs')">📜</button>
     <button class="nb" id="nav-import" onclick="go('import')">📥</button>
@@ -126,6 +127,10 @@ const S = {
   expandedCampaign: null, // For campaign expand
   expandedOrder: null, // For order expand
   currentUser: {id: 'admin', name: 'Admin User'},
+  // Sort states: {column: null, direction: 0/1/2} where 0=none, 1=asc, 2=desc
+  accountsSort: {column: null, direction: 0},
+  campaignsSort: {column: null, direction: 0},
+  ordersSort: {column: null, direction: 0},
   fSearch: '',
   fStatus: '',
   fFuelActivity: '',
@@ -263,6 +268,7 @@ function render() {
   if (S.page === 'accounts') el.innerHTML = renderAccounts();
   else if (S.page === 'campaigns') el.innerHTML = renderCampaigns();
   else if (S.page === 'orders') el.innerHTML = renderOrders();
+  else if (S.page === 'analysis') el.innerHTML = renderAnalysis();
   else if (S.page === 'hitlist') el.innerHTML = renderHitlist();
   else if (S.page === 'logs') el.innerHTML = renderLogs();
   else if (S.page === 'import') el.innerHTML = renderImport();
@@ -270,7 +276,17 @@ function render() {
 
 // ACCOUNTS PAGE
 function renderAccounts() {
-  const list = getVisible();
+  let list = getVisible();
+  
+  // Calculate sales for each customer (needed for sorting)
+  list = list.map(c => ({
+    ...c,
+    sales: S.orders.filter(o => o.customerId === c.id).reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0)
+  }));
+  
+  // Apply sorting
+  list = applySorting(list, 'accounts', ['companyName', 'city', 'fleetSize', 'sales']);
+  
   const totalCustomers = S.customers.length;
   const activeCustomers = S.customers.filter(c => c.ostoreActive).length;
   const inactiveCustomers = totalCustomers - activeCustomers;
@@ -371,7 +387,19 @@ function renderAccounts() {
   html += '</div>';
   
   html += '<div class="tbl-wrap"><table class="tbl">';
-  html += '<thead><tr><th>Company</th><th>City</th><th>Fleet Size</th><th>Sales</th><th>Fuel Activity</th><th>O-store Activity</th><th>Status</th><th>Hitlist</th><th>Last Campaign</th><th>Interest</th><th></th></tr></thead>';
+  html += '<thead><tr>';
+  html += '<th onclick="sortTable(\'accounts\', \'companyName\')" style="cursor:pointer">Company' + getSortIndicator('accounts', 'companyName') + '</th>';
+  html += '<th onclick="sortTable(\'accounts\', \'city\')" style="cursor:pointer">City' + getSortIndicator('accounts', 'city') + '</th>';
+  html += '<th onclick="sortTable(\'accounts\', \'fleetSize\')" style="cursor:pointer">Fleet Size' + getSortIndicator('accounts', 'fleetSize') + '</th>';
+  html += '<th onclick="sortTable(\'accounts\', \'sales\')" style="cursor:pointer">Sales' + getSortIndicator('accounts', 'sales') + '</th>';
+  html += '<th>Fuel Activity</th>';
+  html += '<th>O-store Activity</th>';
+  html += '<th>Status</th>';
+  html += '<th>Hitlist</th>';
+  html += '<th>Last Campaign</th>';
+  html += '<th>Interest</th>';
+  html += '<th></th>';
+  html += '</tr></thead>';
   html += '<tbody>' + (rows || '<tr><td colspan="11"><div class="empty">No customers found</div></td></tr>') + '</tbody>';
   html += '</table></div></div>';
   
@@ -480,6 +508,58 @@ function getVisible() {
   if (S.fOstoreAM) list = list.filter(c => c.ostoreAM === S.fOstoreAM);
   
   return list;
+}
+
+// SORTING FUNCTIONS
+function sortTable(tab, column) {
+  const sortState = tab === 'accounts' ? S.accountsSort : tab === 'campaigns' ? S.campaignsSort : S.ordersSort;
+  
+  if (sortState.column === column) {
+    // Cycle through: asc → desc → none
+    sortState.direction = (sortState.direction + 1) % 3;
+    if (sortState.direction === 0) sortState.column = null;
+  } else {
+    sortState.column = column;
+    sortState.direction = 1; // Start with ascending
+  }
+  
+  render();
+}
+
+function getSortIndicator(tab, column) {
+  const sortState = tab === 'accounts' ? S.accountsSort : tab === 'campaigns' ? S.campaignsSort : S.ordersSort;
+  if (sortState.column !== column) return '';
+  return sortState.direction === 1 ? ' ↑' : sortState.direction === 2 ? ' ↓' : '';
+}
+
+function applySorting(data, tab, columns) {
+  const sortState = tab === 'accounts' ? S.accountsSort : tab === 'campaigns' ? S.campaignsSort : S.ordersSort;
+  
+  if (!sortState.column || sortState.direction === 0) return data;
+  
+  const column = sortState.column;
+  const dir = sortState.direction === 1 ? 1 : -1;
+  
+  return [...data].sort((a, b) => {
+    let aVal = a[column];
+    let bVal = b[column];
+    
+    // Handle special cases
+    if (column === 'companyName' || column === 'name') {
+      aVal = (aVal || '').toLowerCase();
+      bVal = (bVal || '').toLowerCase();
+    } else if (typeof aVal === 'number' || typeof bVal === 'number') {
+      aVal = parseFloat(aVal) || 0;
+      bVal = parseFloat(bVal) || 0;
+    } else if (typeof aVal === 'string') {
+      aVal = aVal.toLowerCase();
+      bVal = (bVal || '').toLowerCase();
+    }
+    
+    if (aVal < bVal) return -1 * dir;
+    if (aVal > bVal) return 1 * dir;
+    return 0;
+  });
 }
 
 function toggleExpand(id) {
@@ -711,22 +791,49 @@ function renderCampaigns() {
   
   // Current Campaigns Section
   if (currentCampaigns.length > 0) {
+    // Enrich campaigns with calculated fields for sorting
+    let sortableCampaigns = currentCampaigns.map(c => {
+      const campaignOrders = getCampaignOrders(c);
+      return {
+        ...c,
+        total: c.customers.length,
+        orderCount: campaignOrders.length,
+        revenue: campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0)
+      };
+    });
+    
+    // Apply sorting
+    sortableCampaigns = applySorting(sortableCampaigns, 'campaigns', ['name', 'type', 'total', 'interested', 'notInterested', 'pending', 'orderCount', 'revenue']);
+    
     html += '<div style="margin-top:25px;margin-bottom:15px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">🚀 Active Campaigns (' + currentCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Orders</th><th>Sales</th><th>$/Customer</th><th>Success Rate</th><th>Action</th></tr></thead>';
+    html += '<thead><tr>';
+    html += '<th onclick="sortTable(\'campaigns\', \'name\')" style="cursor:pointer">Campaign' + getSortIndicator('campaigns', 'name') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'type\')" style="cursor:pointer">Type' + getSortIndicator('campaigns', 'type') + '</th>';
+    html += '<th>Date(s) Sent</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'total\')" style="cursor:pointer">Reach' + getSortIndicator('campaigns', 'total') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'interested\')" style="cursor:pointer">Interested' + getSortIndicator('campaigns', 'interested') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'notInterested\')" style="cursor:pointer">Not Interested' + getSortIndicator('campaigns', 'notInterested') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'pending\')" style="cursor:pointer">Pending' + getSortIndicator('campaigns', 'pending') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'orderCount\')" style="cursor:pointer">Orders' + getSortIndicator('campaigns', 'orderCount') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'revenue\')" style="cursor:pointer">Sales' + getSortIndicator('campaigns', 'revenue') + '</th>';
+    html += '<th>$/Customer</th>';
+    html += '<th>Success Rate</th>';
+    html += '<th>Action</th>';
+    html += '</tr></thead>';
     html += '<tbody>';
     
-    currentCampaigns.forEach(c => {
+    sortableCampaigns.forEach(c => {
       const typeColor = c.type === 'WhatsApp' ? '#0ea5e9' : c.type === 'Telesales' ? '#8b5cf6' : '#f59e0b';
       const typeIcon = c.type === 'WhatsApp' ? '💬' : c.type === 'Telesales' ? '📞' : '🎯';
-      const total = c.customers.length;
+      const total = c.total;
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
-      // Calculate orders and revenue for this campaign
+      // Use pre-calculated values
       const campaignOrders = getCampaignOrders(c);
-      const orderCount = campaignOrders.length;
-      const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+      const orderCount = c.orderCount;
+      const revenue = c.revenue;
       const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
       
       // Sort dates and format
@@ -742,6 +849,8 @@ function renderCampaigns() {
       html += '<td style="font-size:12px">' + dateDisplay + '</td>';
       html += '<td style="font-weight:600">' + total + '</td>';
       html += '<td><span style="color:var(--green);font-weight:600">' + c.interested + '</span></td>';
+      html += '<td><span style="color:var(--red);font-weight:600">' + c.notInterested + '</span></td>';
+      html += '<td><span style="color:var(--txt3);font-weight:600">' + c.pending + '</span></td>';
       html += '<td><span style="font-weight:600;color:var(--blue)">' + orderCount + '</span></td>';
       html += '<td><span style="font-weight:600;color:var(--green)">$' + revenue.toLocaleString() + '</span></td>';
       html += '<td style="font-size:13px;color:var(--oct)">$' + revenuePerCustomer.toLocaleString() + '</td>';
@@ -750,7 +859,7 @@ function renderCampaigns() {
       html += '</tr>';
       
       if (isExpanded) {
-        html += '<tr><td colspan="10" style="padding:0"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
+        html += '<tr><td colspan="12" style="padding:0"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
         html += '<div style="font-weight:700;margin-bottom:15px;font-size:15px">📊 Campaign Details: ' + c.name + '</div>';
         
         // Campaign metrics
@@ -788,22 +897,49 @@ function renderCampaigns() {
   
   // Historical Campaigns Section
   if (historicalCampaigns.length > 0) {
+    // Enrich campaigns with calculated fields for sorting (same as Active)
+    let sortableHistorical = historicalCampaigns.map(c => {
+      const campaignOrders = getCampaignOrders(c);
+      return {
+        ...c,
+        total: c.customers.length,
+        orderCount: campaignOrders.length,
+        revenue: campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0)
+      };
+    });
+    
+    // Apply sorting (using same sort state as active campaigns)
+    sortableHistorical = applySorting(sortableHistorical, 'campaigns', ['name', 'type', 'total', 'interested', 'notInterested', 'pending', 'orderCount', 'revenue']);
+    
     html += '<div style="margin-top:25px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">📜 Historical Campaigns (' + historicalCampaigns.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Campaign</th><th>Type</th><th>Date(s) Sent</th><th>Reach</th><th>Interested</th><th>Orders</th><th>Sales</th><th>$/Customer</th><th>Success Rate</th><th>Action</th></tr></thead>';
+    html += '<thead><tr>';
+    html += '<th onclick="sortTable(\'campaigns\', \'name\')" style="cursor:pointer">Campaign' + getSortIndicator('campaigns', 'name') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'type\')" style="cursor:pointer">Type' + getSortIndicator('campaigns', 'type') + '</th>';
+    html += '<th>Date(s) Sent</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'total\')" style="cursor:pointer">Reach' + getSortIndicator('campaigns', 'total') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'interested\')" style="cursor:pointer">Interested' + getSortIndicator('campaigns', 'interested') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'notInterested\')" style="cursor:pointer">Not Interested' + getSortIndicator('campaigns', 'notInterested') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'pending\')" style="cursor:pointer">Pending' + getSortIndicator('campaigns', 'pending') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'orderCount\')" style="cursor:pointer">Orders' + getSortIndicator('campaigns', 'orderCount') + '</th>';
+    html += '<th onclick="sortTable(\'campaigns\', \'revenue\')" style="cursor:pointer">Sales' + getSortIndicator('campaigns', 'revenue') + '</th>';
+    html += '<th>$/Customer</th>';
+    html += '<th>Success Rate</th>';
+    html += '<th>Action</th>';
+    html += '</tr></thead>';
     html += '<tbody>';
     
-    historicalCampaigns.forEach(c => {
+    sortableHistorical.forEach(c => {
       const typeColor = c.type === 'WhatsApp' ? '#0ea5e9' : c.type === 'Telesales' ? '#8b5cf6' : '#f59e0b';
       const typeIcon = c.type === 'WhatsApp' ? '💬' : c.type === 'Telesales' ? '📞' : '🎯';
-      const total = c.customers.length;
+      const total = c.total;
       const successRate = total > 0 ? Math.round((c.interested / total) * 100) : 0;
       
-      // Calculate orders and revenue for this campaign
+      // Use pre-calculated values
       const campaignOrders = getCampaignOrders(c);
-      const orderCount = campaignOrders.length;
-      const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+      const orderCount = c.orderCount;
+      const revenue = c.revenue;
       const revenuePerCustomer = total > 0 ? Math.round(revenue / total) : 0;
       
       // Sort dates and format
@@ -819,6 +955,8 @@ function renderCampaigns() {
       html += '<td style="font-size:12px">' + dateDisplay + '</td>';
       html += '<td>' + total + '</td>';
       html += '<td><span style="color:var(--green)">' + c.interested + '</span></td>';
+      html += '<td><span style="color:var(--red)">' + c.notInterested + '</span></td>';
+      html += '<td><span style="color:var(--txt3)">' + c.pending + '</span></td>';
       html += '<td><span style="font-weight:600;color:var(--blue);opacity:1">' + orderCount + '</span></td>';
       html += '<td><span style="font-weight:600;color:var(--green);opacity:1">$' + revenue.toLocaleString() + '</span></td>';
       html += '<td style="font-size:13px;color:var(--oct);opacity:1">$' + revenuePerCustomer.toLocaleString() + '</td>';
@@ -827,7 +965,7 @@ function renderCampaigns() {
       html += '</tr>';
       
       if (isExpanded) {
-        html += '<tr><td colspan="10" style="padding:0;opacity:1"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
+        html += '<tr><td colspan="12" style="padding:0;opacity:1"><div style="padding:20px;background:var(--surface2);border-top:1px solid var(--border)">';
         html += '<div style="font-weight:700;margin-bottom:15px;font-size:15px">📊 Campaign Details: ' + c.name + ' (Historical)</div>';
         
         html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:20px">';
@@ -864,6 +1002,326 @@ function renderCampaigns() {
   if (totalCampaigns === 0) {
     html += '<div class="empty">No campaigns yet. Add campaigns to customers to see analytics here.</div>';
   }
+  
+  html += '</div>';
+  return html;
+}
+
+// ANALYSIS PAGE
+function renderAnalysis() {
+  let html = '<div>';
+  html += '<div class="page-head">';
+  html += '<div><div class="ph-title">📊 Analytics Dashboard</div><div class="ph-sub">Comprehensive performance analysis</div></div>';
+  html += '</div>';
+  
+  // ============================================
+  // SECTION 1: O-STORE AGENT PERFORMANCE
+  // ============================================
+  html += '<div style="margin-top:30px">';
+  html += '<h2 style="font-size:20px;font-weight:700;color:var(--txt);margin-bottom:20px">👥 O-store Agent Performance</h2>';
+  
+  // Calculate agent metrics
+  const agentStats = {};
+  
+  S.customers.forEach(c => {
+    const am = c.ostoreAM || 'Unassigned';
+    if (!agentStats[am]) {
+      agentStats[am] = {
+        name: am,
+        totalLeads: 0,
+        interestedLeads: 0,
+        orders: 0,
+        sales: 0,
+        lubesSales: 0,
+        tiresSales: 0,
+        batteriesSales: 0
+      };
+    }
+    
+    agentStats[am].totalLeads++;
+    
+    // Check if interested in any campaign
+    if (c.whatsappInterested === 'Interested' || c.telesalesInterested === 'Interested' || c.dashboardInterested === 'Interested') {
+      agentStats[am].interestedLeads++;
+    }
+    
+    // Calculate orders and sales
+    const customerOrders = S.orders.filter(o => o.customerId === c.id);
+    agentStats[am].orders += customerOrders.length;
+    
+    customerOrders.forEach(o => {
+      const price = parseFloat(o.sellingPrice) || 0;
+      agentStats[am].sales += price;
+      
+      if (o.productType === 'Lubes') agentStats[am].lubesSales += price;
+      else if (o.productType === 'Tires') agentStats[am].tiresSales += price;
+      else if (o.productType === 'Batteries') agentStats[am].batteriesSales += price;
+    });
+  });
+  
+  // Convert to array and calculate conversion rates
+  const agents = Object.values(agentStats).map(a => ({
+    ...a,
+    conversionRate: a.totalLeads > 0 ? Math.round((a.interestedLeads / a.totalLeads) * 100) : 0,
+    orderConversionRate: a.totalLeads > 0 ? Math.round((a.orders / a.totalLeads) * 100) : 0,
+    avgOrderValue: a.orders > 0 ? Math.round(a.sales / a.orders) : 0
+  })).sort((a, b) => b.sales - a.sales);
+  
+  // Agent performance table
+  if (agents.length > 0) {
+    html += '<div class="tbl-wrap"><table class="tbl">';
+    html += '<thead><tr><th>Agent</th><th>Total Leads</th><th>Interested</th><th>Interest Rate</th><th>Orders Closed</th><th>Order Conv. Rate</th><th>Total Sales</th><th>Avg Order Value</th><th>Top Product</th></tr></thead>';
+    html += '<tbody>';
+    
+    agents.forEach(a => {
+      const topProduct = a.lubesSales > a.tiresSales && a.lubesSales > a.batteriesSales ? 'Lubes' :
+                         a.tiresSales > a.batteriesSales ? 'Tires' : 'Batteries';
+      const convColor = a.conversionRate >= 50 ? 'var(--green)' : a.conversionRate >= 30 ? 'var(--oct)' : 'var(--red)';
+      const orderConvColor = a.orderConversionRate >= 30 ? 'var(--green)' : a.orderConversionRate >= 15 ? 'var(--oct)' : 'var(--red)';
+      
+      html += '<tr>';
+      html += '<td><strong>' + a.name + '</strong></td>';
+      html += '<td>' + a.totalLeads + '</td>';
+      html += '<td style="color:var(--green);font-weight:600">' + a.interestedLeads + '</td>';
+      html += '<td style="color:' + convColor + ';font-weight:700">' + a.conversionRate + '%</td>';
+      html += '<td style="color:var(--blue);font-weight:600">' + a.orders + '</td>';
+      html += '<td style="color:' + orderConvColor + ';font-weight:700">' + a.orderConversionRate + '%</td>';
+      html += '<td style="color:var(--green);font-weight:700">$' + a.sales.toLocaleString() + '</td>';
+      html += '<td style="font-weight:600">$' + a.avgOrderValue.toLocaleString() + '</td>';
+      html += '<td>' + topProduct + '</td>';
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+  }
+  
+  html += '</div>';
+  
+  // ============================================
+  // SECTION 2: CUSTOMER ANALYSIS
+  // ============================================
+  html += '<div style="margin-top:40px">';
+  html += '<h2 style="font-size:20px;font-weight:700;color:var(--txt);margin-bottom:20px">🏢 Customer Analysis</h2>';
+  
+  // Calculate customer metrics
+  const customerMetrics = S.customers.map(c => {
+    const orders = S.orders.filter(o => o.customerId === c.id);
+    const sales = orders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+    const productTypes = new Set(orders.map(o => o.productType).filter(Boolean));
+    
+    return {
+      id: c.id,
+      name: c.companyName,
+      orderCount: orders.length,
+      sales: sales,
+      avgOrderValue: orders.length > 0 ? Math.round(sales / orders.length) : 0,
+      productDiversity: productTypes.size,
+      city: c.city || '—',
+      lastOrder: orders.length > 0 ? Math.max(...orders.map(o => new Date(o.salesOrderDate || 0))) : null
+    };
+  }).filter(c => c.orderCount > 0);
+  
+  // Top customers by different metrics
+  const topBySales = [...customerMetrics].sort((a, b) => b.sales - a.sales).slice(0, 10);
+  const topByOrders = [...customerMetrics].sort((a, b) => b.orderCount - a.orderCount).slice(0, 10);
+  const topByAvgValue = [...customerMetrics].sort((a, b) => b.avgOrderValue - a.avgOrderValue).slice(0, 10);
+  
+  // Top 10 by Sales
+  html += '<h3 style="font-size:16px;font-weight:600;color:var(--txt);margin-bottom:15px;margin-top:20px">🏆 Top 10 Customers by Sales</h3>';
+  html += '<div class="tbl-wrap"><table class="tbl">';
+  html += '<thead><tr><th>Rank</th><th>Customer</th><th>City</th><th>Total Sales</th><th>Orders</th><th>Avg Order Value</th><th>Product Diversity</th></tr></thead>';
+  html += '<tbody>';
+  
+  topBySales.forEach((c, idx) => {
+    const rankColor = idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : 'var(--txt3)';
+    const rankEmoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1);
+    
+    html += '<tr>';
+    html += '<td style="color:' + rankColor + ';font-weight:700;font-size:16px">' + rankEmoji + '</td>';
+    html += '<td><strong>' + c.name + '</strong></td>';
+    html += '<td>' + c.city + '</td>';
+    html += '<td style="color:var(--green);font-weight:700">$' + c.sales.toLocaleString() + '</td>';
+    html += '<td style="font-weight:600">' + c.orderCount + '</td>';
+    html += '<td style="font-weight:600">$' + c.avgOrderValue.toLocaleString() + '</td>';
+    html += '<td>' + c.productDiversity + ' types</td>';
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  
+  // Top 10 by Order Count
+  html += '<h3 style="font-size:16px;font-weight:600;color:var(--txt);margin-bottom:15px;margin-top:25px">📦 Top 10 Most Frequent Buyers</h3>';
+  html += '<div class="tbl-wrap"><table class="tbl">';
+  html += '<thead><tr><th>Rank</th><th>Customer</th><th>Orders</th><th>Total Sales</th><th>Avg Order Value</th></tr></thead>';
+  html += '<tbody>';
+  
+  topByOrders.forEach((c, idx) => {
+    html += '<tr>';
+    html += '<td style="font-weight:600">' + (idx + 1) + '</td>';
+    html += '<td><strong>' + c.name + '</strong></td>';
+    html += '<td style="color:var(--blue);font-weight:700">' + c.orderCount + '</td>';
+    html += '<td style="color:var(--green);font-weight:600">$' + c.sales.toLocaleString() + '</td>';
+    html += '<td>$' + c.avgOrderValue.toLocaleString() + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  
+  // Top 10 by Average Order Value
+  html += '<h3 style="font-size:16px;font-weight:600;color:var(--txt);margin-bottom:15px;margin-top:25px">💎 Top 10 Highest Value Customers</h3>';
+  html += '<div class="tbl-wrap"><table class="tbl">';
+  html += '<thead><tr><th>Rank</th><th>Customer</th><th>Avg Order Value</th><th>Orders</th><th>Total Sales</th></tr></thead>';
+  html += '<tbody>';
+  
+  topByAvgValue.forEach((c, idx) => {
+    html += '<tr>';
+    html += '<td style="font-weight:600">' + (idx + 1) + '</td>';
+    html += '<td><strong>' + c.name + '</strong></td>';
+    html += '<td style="color:var(--oct);font-weight:700">$' + c.avgOrderValue.toLocaleString() + '</td>';
+    html += '<td>' + c.orderCount + '</td>';
+    html += '<td style="color:var(--green);font-weight:600">$' + c.sales.toLocaleString() + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  html += '</div>';
+  
+  // ============================================
+  // SECTION 3: CAMPAIGN ANALYSIS
+  // ============================================
+  html += '<div style="margin-top:40px;margin-bottom:30px">';
+  html += '<h2 style="font-size:20px;font-weight:700;color:var(--txt);margin-bottom:20px">📢 Campaign Performance Analysis</h2>';
+  
+  // Gather campaign data
+  const campaignMap = {};
+  
+  S.customers.forEach(customer => {
+    ['whatsapp', 'telesales', 'dashboard'].forEach(channel => {
+      const campaignField = channel + 'Campaign';
+      const interestedField = channel + 'Interested';
+      const dateField = channel + 'Date';
+      
+      const campName = customer[campaignField];
+      const interested = customer[interestedField];
+      const date = customer[dateField];
+      
+      if (campName) {
+        const type = channel === 'whatsapp' ? 'WhatsApp' : channel === 'telesales' ? 'Telesales' : 'Dashboard';
+        const key = type + '|' + campName;
+        
+        if (!campaignMap[key]) {
+          campaignMap[key] = {
+            type: type,
+            name: campName,
+            reach: 0,
+            interested: 0,
+            notInterested: 0,
+            pending: 0,
+            orders: 0,
+            sales: 0
+          };
+        }
+        
+        campaignMap[key].reach++;
+        if (interested === 'Interested') campaignMap[key].interested++;
+        else if (interested === 'Not interested') campaignMap[key].notInterested++;
+        else if (interested === 'Pending') campaignMap[key].pending++;
+      }
+    });
+  });
+  
+  // Add order data to campaigns
+  S.orders.forEach(o => {
+    if (o.campaignChannel && o.campaignName) {
+      const key = o.campaignChannel + '|' + o.campaignName;
+      if (campaignMap[key]) {
+        campaignMap[key].orders++;
+        campaignMap[key].sales += parseFloat(o.sellingPrice) || 0;
+      }
+    }
+  });
+  
+  // Calculate campaign metrics
+  const campaigns = Object.values(campaignMap).map(c => ({
+    ...c,
+    interestRate: c.reach > 0 ? Math.round((c.interested / c.reach) * 100) : 0,
+    orderConvRate: c.reach > 0 ? Math.round((c.orders / c.reach) * 100) : 0,
+    roi: c.orders > 0 ? Math.round(c.sales / c.orders) : 0
+  }));
+  
+  // Campaign type comparison
+  const typeStats = {
+    WhatsApp: { campaigns: 0, reach: 0, interested: 0, orders: 0, sales: 0 },
+    Telesales: { campaigns: 0, reach: 0, interested: 0, orders: 0, sales: 0 },
+    Dashboard: { campaigns: 0, reach: 0, interested: 0, orders: 0, sales: 0 }
+  };
+  
+  campaigns.forEach(c => {
+    if (typeStats[c.type]) {
+      typeStats[c.type].campaigns++;
+      typeStats[c.type].reach += c.reach;
+      typeStats[c.type].interested += c.interested;
+      typeStats[c.type].orders += c.orders;
+      typeStats[c.type].sales += c.sales;
+    }
+  });
+  
+  // Campaign Type Performance
+  html += '<h3 style="font-size:16px;font-weight:600;color:var(--txt);margin-bottom:15px">📊 Performance by Campaign Type</h3>';
+  html += '<div class="tbl-wrap"><table class="tbl">';
+  html += '<thead><tr><th>Type</th><th>Campaigns</th><th>Total Reach</th><th>Interest Rate</th><th>Orders</th><th>Order Conv. Rate</th><th>Total Sales</th><th>Sales per Campaign</th></tr></thead>';
+  html += '<tbody>';
+  
+  Object.entries(typeStats).forEach(([type, stats]) => {
+    const interestRate = stats.reach > 0 ? Math.round((stats.interested / stats.reach) * 100) : 0;
+    const orderConv = stats.reach > 0 ? Math.round((stats.orders / stats.reach) * 100) : 0;
+    const avgSales = stats.campaigns > 0 ? Math.round(stats.sales / stats.campaigns) : 0;
+    const typeColor = type === 'WhatsApp' ? '#0ea5e9' : type === 'Telesales' ? '#8b5cf6' : '#f59e0b';
+    
+    html += '<tr>';
+    html += '<td style="color:' + typeColor + ';font-weight:700">' + type + '</td>';
+    html += '<td>' + stats.campaigns + '</td>';
+    html += '<td style="font-weight:600">' + stats.reach + '</td>';
+    html += '<td style="color:var(--green);font-weight:600">' + interestRate + '%</td>';
+    html += '<td style="color:var(--blue);font-weight:700">' + stats.orders + '</td>';
+    html += '<td style="color:var(--oct);font-weight:700">' + orderConv + '%</td>';
+    html += '<td style="color:var(--green);font-weight:700">$' + stats.sales.toLocaleString() + '</td>';
+    html += '<td style="font-weight:600">$' + avgSales.toLocaleString() + '</td>';
+    html += '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  
+  // Best performing campaigns
+  const bestCampaigns = campaigns.filter(c => c.orders > 0).sort((a, b) => b.sales - a.sales).slice(0, 10);
+  
+  if (bestCampaigns.length > 0) {
+    html += '<h3 style="font-size:16px;font-weight:600;color:var(--txt);margin-bottom:15px;margin-top:25px">🏆 Top 10 Campaigns by Revenue</h3>';
+    html += '<div class="tbl-wrap"><table class="tbl">';
+    html += '<thead><tr><th>Rank</th><th>Campaign</th><th>Type</th><th>Reach</th><th>Interest Rate</th><th>Orders</th><th>Conv. Rate</th><th>Total Sales</th><th>ROI per Order</th></tr></thead>';
+    html += '<tbody>';
+    
+    bestCampaigns.forEach((c, idx) => {
+      const rankEmoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1);
+      const typeColor = c.type === 'WhatsApp' ? '#0ea5e9' : c.type === 'Telesales' ? '#8b5cf6' : '#f59e0b';
+      
+      html += '<tr>';
+      html += '<td style="font-weight:700;font-size:16px">' + rankEmoji + '</td>';
+      html += '<td><strong>' + c.name + '</strong></td>';
+      html += '<td style="color:' + typeColor + ';font-weight:600">' + c.type + '</td>';
+      html += '<td>' + c.reach + '</td>';
+      html += '<td style="color:var(--green);font-weight:600">' + c.interestRate + '%</td>';
+      html += '<td style="color:var(--blue);font-weight:700">' + c.orders + '</td>';
+      html += '<td style="color:var(--oct);font-weight:700">' + c.orderConvRate + '%</td>';
+      html += '<td style="color:var(--green);font-weight:700">$' + c.sales.toLocaleString() + '</td>';
+      html += '<td style="font-weight:600">$' + c.roi.toLocaleString() + '</td>';
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+  }
+  
+  html += '</div>';
   
   html += '</div>';
   return html;
@@ -1017,16 +1475,42 @@ function renderOrders() {
   
   // Orders table
   if (filteredOrders.length > 0) {
+    // Enrich orders with calculated fields for sorting
+    let sortableOrders = filteredOrders.map(o => {
+      const customer = S.customers.find(c => c.id === o.customerId);
+      return {
+        ...o,
+        customerName: customer ? customer.companyName : o.customerId,
+        margin: o.sellingPrice && o.cost ? Math.round(((o.sellingPrice - o.cost) / o.sellingPrice) * 100) : 0,
+        sellingPriceNum: parseFloat(o.sellingPrice) || 0,
+        quantityNum: parseInt(o.quantity) || 0
+      };
+    });
+    
+    // Apply sorting
+    sortableOrders = applySorting(sortableOrders, 'orders', ['salesOrderId', 'customerName', 'productType', 'quantityNum', 'sellingPriceNum', 'margin', 'status', 'salesPerson']);
+    
     html += '<div style="margin-top:25px">';
     html += '<h3 style="font-size:18px;font-weight:700;color:var(--txt);margin-bottom:15px">All Orders (' + filteredOrders.length + ')</h3>';
     html += '<div class="tbl-wrap"><table class="tbl">';
-    html += '<thead><tr><th>Sales Order ID</th><th>Customer</th><th>Campaign</th><th>Product</th><th>Quantity</th><th>Selling Price</th><th>Margin %</th><th>Status</th><th>Sales Person</th><th>Action</th></tr></thead>';
+    html += '<thead><tr>';
+    html += '<th onclick="sortTable(\'orders\', \'salesOrderId\')" style="cursor:pointer">Sales Order ID' + getSortIndicator('orders', 'salesOrderId') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'customerName\')" style="cursor:pointer">Customer' + getSortIndicator('orders', 'customerName') + '</th>';
+    html += '<th>Campaign</th>';
+    html += '<th onclick="sortTable(\'orders\', \'productType\')" style="cursor:pointer">Product' + getSortIndicator('orders', 'productType') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'quantityNum\')" style="cursor:pointer">Quantity' + getSortIndicator('orders', 'quantityNum') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'sellingPriceNum\')" style="cursor:pointer">Selling Price' + getSortIndicator('orders', 'sellingPriceNum') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'margin\')" style="cursor:pointer">Margin %' + getSortIndicator('orders', 'margin') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'status\')" style="cursor:pointer">Status' + getSortIndicator('orders', 'status') + '</th>';
+    html += '<th onclick="sortTable(\'orders\', \'salesPerson\')" style="cursor:pointer">Sales Person' + getSortIndicator('orders', 'salesPerson') + '</th>';
+    html += '<th>Action</th>';
+    html += '</tr></thead>';
     html += '<tbody>';
     
-    filteredOrders.forEach(o => {
+    sortableOrders.forEach(o => {
       const customer = S.customers.find(c => c.id === o.customerId);
-      const customerName = customer ? customer.companyName : o.customerId;
-      const margin = o.sellingPrice && o.cost ? Math.round(((o.sellingPrice - o.cost) / o.sellingPrice) * 100) : 0;
+      const customerName = o.customerName;
+      const margin = o.margin;
       const statusColor = o.status === 'Completed' ? 'var(--green)' : o.status === 'Cancelled' ? 'var(--red)' : o.status === 'Processed' ? 'var(--blue)' : 'var(--txt3)';
       const isExpanded = S.expandedOrder === o.salesOrderId;
       
