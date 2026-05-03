@@ -89,7 +89,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .log-user{color:var(--oct);font-weight:600;margin-right:5px}
 .log-action{color:var(--txt2)}
 </style>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -2499,86 +2498,86 @@ function exportData() {
     return;
   }
   
-  // Create workbook
-  const wb = XLSX.utils.book_new();
+  let filesExported = 0;
   
-  // SHEET 1: CUSTOMERS
+  // FILE 1: CUSTOMERS CSV
   if (S.customers.length > 0) {
-    const customersData = S.customers.map(c => ({
-      'Customer ID': c.id,
-      'Company Name': c.companyName,
-      'Primary Contact': c.primaryContactName || '',
-      'Primary Phone': c.primaryContactPhone || '',
-      'Secondary Contact': c.secondaryContactName || '',
-      'Secondary Phone': c.secondaryContactPhone || '',
-      'City': c.city || '',
-      'Fleet Size': c.fleetSize || 0,
-      'Fuel Active': c.fuelActive ? 'Yes' : 'No',
-      'O-store Active': c.ostoreActive ? 'Yes' : 'No',
-      'Fuel AM': c.fuelAM || '',
-      'O-store AM': c.ostoreAM || '',
-      'On Hitlist': c.onHitlist ? 'Yes' : 'No',
-      'Status': c.ostoreStatus || '',
-      'Note': c.ostoreNote || '',
-      'Last Activity': c.lastActivityOstore || '',
-      'WhatsApp Campaign': c.whatsappCampaign || '',
-      'WhatsApp Date': convertToUS(c.whatsappDate || ''),
-      'WhatsApp Interest': c.whatsappInterested || '',
-      'Telesales Campaign': c.telesalesCampaign || '',
-      'Telesales Date': convertToUS(c.telesalesDate || ''),
-      'Telesales Interest': c.telesalesInterested || '',
-      'Dashboard Campaign': c.dashboardCampaign || '',
-      'Dashboard Date': convertToUS(c.dashboardDate || ''),
-      'Dashboard Interest': c.dashboardInterested || '',
-      'Created': c.createdAt || ''
-    }));
+    let csv = 'Customer ID,Company Name,Primary Contact,Primary Phone,Secondary Contact,Secondary Phone,City,Fleet Size,Fuel Active,O-store Active,Fuel AM,O-store AM,On Hitlist,Status,Note,Last Activity,WhatsApp Campaign,WhatsApp Date,WhatsApp Interest,Telesales Campaign,Telesales Date,Telesales Interest,Dashboard Campaign,Dashboard Date,Dashboard Interest,Created\n';
     
-    const ws1 = XLSX.utils.json_to_sheet(customersData);
-    XLSX.utils.book_append_sheet(wb, ws1, 'Customers');
+    S.customers.forEach(c => {
+      csv += '"' + (c.id || '') + '",';
+      csv += '"' + (c.companyName || '') + '",';
+      csv += '"' + (c.primaryContactName || '') + '",';
+      csv += '"' + (c.primaryContactPhone || '') + '",';
+      csv += '"' + (c.secondaryContactName || '') + '",';
+      csv += '"' + (c.secondaryContactPhone || '') + '",';
+      csv += '"' + (c.city || '') + '",';
+      csv += (c.fleetSize || 0) + ',';
+      csv += (c.fuelActive ? 'Yes' : 'No') + ',';
+      csv += (c.ostoreActive ? 'Yes' : 'No') + ',';
+      csv += '"' + (c.fuelAM || '') + '",';
+      csv += '"' + (c.ostoreAM || '') + '",';
+      csv += (c.onHitlist ? 'Yes' : 'No') + ',';
+      csv += '"' + (c.ostoreStatus || '') + '",';
+      csv += '"' + (c.ostoreNote || '').replace(/"/g, '""') + '",';
+      csv += '"' + (c.lastActivityOstore || '') + '",';
+      csv += '"' + (c.whatsappCampaign || '') + '",';
+      csv += '"' + convertToUS(c.whatsappDate || '') + '",';
+      csv += '"' + (c.whatsappInterested || '') + '",';
+      csv += '"' + (c.telesalesCampaign || '') + '",';
+      csv += '"' + convertToUS(c.telesalesDate || '') + '",';
+      csv += '"' + (c.telesalesInterested || '') + '",';
+      csv += '"' + (c.dashboardCampaign || '') + '",';
+      csv += '"' + convertToUS(c.dashboardDate || '') + '",';
+      csv += '"' + (c.dashboardInterested || '') + '",';
+      csv += '"' + (c.createdAt || '') + '"\n';
+    });
+    
+    downloadCSV(csv, 'Octane_Customers_' + new Date().toISOString().split('T')[0] + '.csv');
+    filesExported++;
   }
   
-  // SHEET 2: ORDERS
+  // FILE 2: ORDERS CSV
   if (S.orders.length > 0) {
-    const ordersData = S.orders.map(o => {
+    let csv = 'Sales Order ID,Quotation ID,Customer ID,Customer Name,Product Type,Product Brand,Product Description,Quantity,Cost,Selling Price,Margin %,Payment Method,Credit Duration,Status,Vendor,Campaign Channel,Campaign Name,Sales Person,Quotation Date,Sales Order Date\n';
+    
+    S.orders.forEach(o => {
       const customer = S.customers.find(c => c.id === o.customerId);
       const margin = o.sellingPrice && o.cost ? Math.round(((o.sellingPrice - o.cost) / o.sellingPrice) * 100) : 0;
       
-      return {
-        'Sales Order ID': o.salesOrderId || '',
-        'Quotation ID': o.quotationId || '',
-        'Customer ID': o.customerId || '',
-        'Customer Name': customer ? customer.companyName : '',
-        'Product Type': o.productType || '',
-        'Product Brand': o.productBrand || '',
-        'Product Description': o.productDescription || '',
-        'Quantity': o.quantity || 0,
-        'Cost': o.cost || 0,
-        'Selling Price': o.sellingPrice || 0,
-        'Margin %': margin,
-        'Payment Method': o.paymentMethod || '',
-        'Credit Duration': o.creditDuration || '',
-        'Status': o.status || '',
-        'Vendor': o.vendor || '',
-        'Campaign Channel': o.campaignChannel || '',
-        'Campaign Name': o.campaignName || '',
-        'Sales Person': o.salesPerson || '',
-        'Quotation Date': convertToUS(o.quotationDate || ''),
-        'Sales Order Date': convertToUS(o.salesOrderDate || '')
-      };
+      csv += '"' + (o.salesOrderId || '') + '",';
+      csv += '"' + (o.quotationId || '') + '",';
+      csv += '"' + (o.customerId || '') + '",';
+      csv += '"' + (customer ? customer.companyName : '') + '",';
+      csv += '"' + (o.productType || '') + '",';
+      csv += '"' + (o.productBrand || '') + '",';
+      csv += '"' + (o.productDescription || '').replace(/"/g, '""') + '",';
+      csv += (o.quantity || 0) + ',';
+      csv += (o.cost || 0) + ',';
+      csv += (o.sellingPrice || 0) + ',';
+      csv += margin + ',';
+      csv += '"' + (o.paymentMethod || '') + '",';
+      csv += '"' + (o.creditDuration || '') + '",';
+      csv += '"' + (o.status || '') + '",';
+      csv += '"' + (o.vendor || '') + '",';
+      csv += '"' + (o.campaignChannel || '') + '",';
+      csv += '"' + (o.campaignName || '') + '",';
+      csv += '"' + (o.salesPerson || '') + '",';
+      csv += '"' + convertToUS(o.quotationDate || '') + '",';
+      csv += '"' + convertToUS(o.salesOrderDate || '') + '"\n';
     });
     
-    const ws2 = XLSX.utils.json_to_sheet(ordersData);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Orders');
+    downloadCSV(csv, 'Octane_Orders_' + new Date().toISOString().split('T')[0] + '.csv');
+    filesExported++;
   }
   
-  // SHEET 3: CAMPAIGNS SUMMARY
+  // FILE 3: CAMPAIGNS CSV
   const campaignMap = {};
   
   S.customers.forEach(customer => {
     ['whatsapp', 'telesales', 'dashboard'].forEach(channel => {
       const campaignField = channel + 'Campaign';
       const interestedField = channel + 'Interested';
-      const dateField = channel + 'Date';
       
       const campName = customer[campaignField];
       if (campName) {
@@ -2586,14 +2585,7 @@ function exportData() {
         const key = type + '|' + campName;
         
         if (!campaignMap[key]) {
-          campaignMap[key] = {
-            type: type,
-            name: campName,
-            reach: 0,
-            interested: 0,
-            notInterested: 0,
-            pending: 0
-          };
+          campaignMap[key] = { type: type, name: campName, reach: 0, interested: 0, notInterested: 0, pending: 0 };
         }
         
         campaignMap[key].reach++;
@@ -2604,44 +2596,56 @@ function exportData() {
     });
   });
   
-  const campaignsData = Object.values(campaignMap).map(c => {
-    const campaignOrders = S.orders.filter(o => {
-      const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
-      const orderName = (o.campaignName || '').trim().toLowerCase();
-      const campType = (c.type || '').trim().toLowerCase();
-      const campName = (c.name || '').trim().toLowerCase();
-      return orderChannel === campType && orderName === campName;
+  const campaigns = Object.values(campaignMap);
+  
+  if (campaigns.length > 0) {
+    let csv = 'Campaign Name,Type,Reach,Interested,Not Interested,Pending,Orders,Sales,Margin %,Success Rate %\n';
+    
+    campaigns.forEach(c => {
+      const campaignOrders = S.orders.filter(o => {
+        const orderChannel = (o.campaignChannel || '').trim().toLowerCase();
+        const orderName = (o.campaignName || '').trim().toLowerCase();
+        const campType = (c.type || '').trim().toLowerCase();
+        const campName = (c.name || '').trim().toLowerCase();
+        return orderChannel === campType && orderName === campName;
+      });
+      
+      const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
+      const cost = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.cost) || 0), 0);
+      const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0;
+      const successRate = c.reach > 0 ? Math.round((c.interested / c.reach) * 100) : 0;
+      
+      csv += '"' + c.name + '",';
+      csv += '"' + c.type + '",';
+      csv += c.reach + ',';
+      csv += c.interested + ',';
+      csv += c.notInterested + ',';
+      csv += c.pending + ',';
+      csv += campaignOrders.length + ',';
+      csv += revenue + ',';
+      csv += margin + ',';
+      csv += successRate + '\n';
     });
     
-    const revenue = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.sellingPrice) || 0), 0);
-    const cost = campaignOrders.reduce((sum, o) => sum + (parseFloat(o.cost) || 0), 0);
-    const margin = revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : 0;
-    
-    return {
-      'Campaign Name': c.name,
-      'Type': c.type,
-      'Reach': c.reach,
-      'Interested': c.interested,
-      'Not Interested': c.notInterested,
-      'Pending': c.pending,
-      'Orders': campaignOrders.length,
-      'Sales': revenue,
-      'Margin %': margin,
-      'Success Rate %': c.reach > 0 ? Math.round((c.interested / c.reach) * 100) : 0
-    };
-  });
-  
-  if (campaignsData.length > 0) {
-    const ws3 = XLSX.utils.json_to_sheet(campaignsData);
-    XLSX.utils.book_append_sheet(wb, ws3, 'Campaigns');
+    downloadCSV(csv, 'Octane_Campaigns_' + new Date().toISOString().split('T')[0] + '.csv');
+    filesExported++;
   }
   
-  // Generate Excel file
-  const fileName = 'Octane_CRM_Export_' + new Date().toISOString().split('T')[0] + '.xlsx';
-  XLSX.writeFile(wb, fileName);
-  
-  logActivity('Exported data to Excel (' + S.customers.length + ' customers, ' + S.orders.length + ' orders)', '');
-  toast('Excel file exported successfully!', 'success');
+  logActivity('Exported ' + filesExported + ' CSV files (' + S.customers.length + ' customers, ' + S.orders.length + ' orders)', '');
+  toast('Exported ' + filesExported + ' CSV files successfully!', 'success');
+}
+
+function downloadCSV(csvContent, fileName) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', fileName);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // UTILITIES
