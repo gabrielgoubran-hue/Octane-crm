@@ -2863,45 +2863,6 @@ window.debugCampaignOrders = function() {
 };
 
 // EXPORT HELPER: Export your data for sharing
-window.exportData = function() {
-  const data = {
-    customers: S.customers.map(c => ({
-      id: c.id,
-      companyName: c.companyName,
-      whatsappCampaign: c.whatsappCampaign,
-      whatsappInterested: c.whatsappInterested,
-      telesalesCampaign: c.telesalesCampaign,
-      telesalesInterested: c.telesalesInterested,
-      dashboardCampaign: c.dashboardCampaign,
-      dashboardInterested: c.dashboardInterested
-    })),
-    orders: S.orders.map(o => ({
-      salesOrderId: o.salesOrderId,
-      customerId: o.customerId,
-      campaignChannel: o.campaignChannel,
-      campaignName: o.campaignName,
-      productType: o.productType,
-      sellingPrice: o.sellingPrice,
-      status: o.status
-    }))
-  };
-  
-  console.log('=== COPY THIS DATA ===');
-  console.log(JSON.stringify(data, null, 2));
-  console.log('\n=== OR DOWNLOAD AS FILE ===');
-  
-  // Also create downloadable file
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'octane-crm-debug-data.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  
-  console.log('✅ File downloaded: octane-crm-debug-data.json');
-  return data;
-};
 
 function handleOrdersCSV(file) {
   if (!file) return;
