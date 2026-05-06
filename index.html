@@ -1516,7 +1516,10 @@ function renderOrders() {
   let html = '<div>';
   html += '<div class="page-head">';
   html += '<div><div class="ph-title">📦 Orders</div><div class="ph-sub">' + totalOrders + ' total orders</div></div>';
-  html += '<div class="ph-right"><button class="btn btn-primary" onclick="go(\'import\');setTimeout(() => document.getElementById(\'import-orders-section\').scrollIntoView({behavior:\'smooth\'}), 100)">📥 Import Orders</button></div>';
+  html += '<div class="ph-right">';
+  html += '<button class="btn btn-primary" onclick="showCreateOrderModal()" style="margin-right:10px">➕ Create Order</button>';
+  html += '<button class="btn btn-primary" onclick="go(\'import\');setTimeout(() => document.getElementById(\'import-orders-section\').scrollIntoView({behavior:\'smooth\'}), 100)">📥 Import Orders</button>';
+  html += '</div>';
   html += '</div>';
   
   // Stats
@@ -1688,7 +1691,7 @@ function renderOrders() {
       html += '<td style="font-weight:600;color:' + (margin >= 20 ? 'var(--green)' : margin >= 10 ? 'var(--oct)' : 'var(--red)') + '">' + margin + '%</td>';
       html += '<td><span style="color:' + statusColor + ';font-weight:600">' + (o.status || '—') + '</span></td>';
       html += '<td style="font-size:12px">' + (o.salesPerson || '—') + '</td>';
-      html += '<td><button class="btn-secondary" style="padding:6px 12px;font-size:12px;background:var(--red);color:white" onclick="event.stopPropagation();deleteOrder(\'' + (o.salesOrderId || '').replace(/'/g, "\\'") + '\')">🗑️</button></td>';
+      html += '<td><button class="btn-secondary" style="padding:6px 10px;font-size:12px;margin-right:5px" onclick="event.stopPropagation();showEditOrderModal(\'' + (o.salesOrderId || '').replace(/'/g, "\\'") + '\')">✏️</button><button class="btn-secondary" style="padding:6px 10px;font-size:12px;background:var(--red);color:white" onclick="event.stopPropagation();deleteOrder(\'' + (o.salesOrderId || '').replace(/'/g, "\\'") + '\')">🗑️</button></td>';
       html += '</tr>';
       
       if (isExpanded) {
@@ -1869,6 +1872,87 @@ function deleteOrder(salesOrderId) {
     render();
     toast('Order deleted successfully', 'success');
   }
+}
+
+function showCreateOrderModal() {
+  showOrderModal(null);
+}
+
+function showEditOrderModal(salesOrderId) {
+  const order = S.orders.find(o => o.salesOrderId === salesOrderId);
+  showOrderModal(order);
+}
+
+function showOrderModal(order) {
+  const isEdit = !!order;
+  const title = isEdit ? '✏️ Edit Order' : '➕ Create Order';
+  
+  const modal = `<div id="order-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10000" onclick="if(event.target.id==='order-modal')closeOrderModal()"><div style="background:var(--surface);border-radius:12px;width:90%;max-width:700px;max-height:90vh;overflow-y:auto;padding:25px;box-shadow:0 20px 60px rgba(0,0,0,0.4)" onclick="event.stopPropagation()"><h2 style="margin:0 0 20px;font-size:22px">${title}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px"><div><label style="display:block;margin-bottom:5px;font-weight:600">Sales Order ID *</label><input type="text" id="m-salesOrderId" value="${isEdit ? order.salesOrderId : ''}" ${isEdit ? 'readonly style="background:#f0f0f0"' : ''} placeholder="S07001" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Customer *</label><select id="m-customerId" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"><option value="">Select Customer</option>${S.customers.map(c => `<option value="${c.id}"${isEdit && order.customerId === c.id ? ' selected' : ''}>${c.companyName}</option>`).join('')}</select></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Product Type *</label><select id="m-productType" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"><option value="">Select</option><option value="Lubes"${isEdit && order.productType === 'Lubes' ? ' selected' : ''}>Lubes</option><option value="Tires"${isEdit && order.productType === 'Tires' ? ' selected' : ''}>Tires</option><option value="Batteries"${isEdit && order.productType === 'Batteries' ? ' selected' : ''}>Batteries</option></select></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Brand</label><input type="text" id="m-productBrand" value="${isEdit ? order.productBrand || '' : ''}" placeholder="Mobil, Michelin..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Quantity *</label><input type="number" id="m-quantity" value="${isEdit ? order.quantity || '' : ''}" placeholder="100" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Cost *</label><input type="number" id="m-cost" value="${isEdit ? order.cost || '' : ''}" placeholder="5000" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Selling Price *</label><input type="number" id="m-sellingPrice" value="${isEdit ? order.sellingPrice || '' : ''}" placeholder="6000" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Status *</label><select id="m-status" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"><option value="Quotation"${isEdit && order.status === 'Quotation' ? ' selected' : ''}>Quotation</option><option value="Processed"${isEdit && order.status === 'Processed' ? ' selected' : ''}>Processed</option><option value="Completed"${isEdit && order.status === 'Completed' ? ' selected' : ''}>Completed</option><option value="Cancelled"${isEdit && order.status === 'Cancelled' ? ' selected' : ''}>Cancelled</option></select></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Payment</label><select id="m-paymentMethod" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"><option value="Cash"${isEdit && order.paymentMethod === 'Cash' ? ' selected' : ''}>Cash</option><option value="Credit"${isEdit && order.paymentMethod === 'Credit' ? ' selected' : ''}>Credit</option></select></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Sales Person</label><input type="text" id="m-salesPerson" value="${isEdit ? order.salesPerson || '' : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Campaign</label><input type="text" id="m-campaignName" value="${isEdit ? order.campaignName || '' : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div><div><label style="display:block;margin-bottom:5px;font-weight:600">Campaign Type</label><select id="m-campaignChannel" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"><option value="">None</option><option value="WhatsApp"${isEdit && order.campaignChannel === 'WhatsApp' ? ' selected' : ''}>WhatsApp</option><option value="Telesales"${isEdit && order.campaignChannel === 'Telesales' ? ' selected' : ''}>Telesales</option><option value="Dashboard"${isEdit && order.campaignChannel === 'Dashboard' ? ' selected' : ''}>Dashboard</option></select></div><div style="grid-column:1/-1"><label style="display:block;margin-bottom:5px;font-weight:600">Description</label><input type="text" id="m-productDescription" value="${isEdit ? order.productDescription || '' : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px"></div></div><div style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end"><button onclick="closeOrderModal()" class="btn-secondary">Cancel</button><button onclick="saveOrder(${isEdit})" class="btn-primary">${isEdit ? 'Save' : 'Create'}</button></div></div></div>`;
+  
+  document.body.insertAdjacentHTML('beforeend', modal);
+  setTimeout(() => document.getElementById('m-salesOrderId').focus(), 100);
+}
+
+function closeOrderModal() {
+  const modal = document.getElementById('order-modal');
+  if (modal) modal.remove();
+}
+
+function saveOrder(isEdit) {
+  const id = document.getElementById('m-salesOrderId').value.trim();
+  const customerId = document.getElementById('m-customerId').value;
+  const productType = document.getElementById('m-productType').value;
+  const qty = document.getElementById('m-quantity').value;
+  const cost = document.getElementById('m-cost').value;
+  const price = document.getElementById('m-sellingPrice').value;
+  
+  if (!id || !customerId || !productType || !qty || !cost || !price) {
+    toast('Please fill all required fields', 'error');
+    return;
+  }
+  
+  if (!isEdit && S.orders.find(o => o.salesOrderId === id)) {
+    toast('Order ID already exists', 'error');
+    return;
+  }
+  
+  const orderData = {
+    salesOrderId: id,
+    customerId: customerId,
+    productType: productType,
+    productBrand: document.getElementById('m-productBrand').value.trim(),
+    productDescription: document.getElementById('m-productDescription').value.trim(),
+    quantity: parseInt(qty),
+    cost: parseFloat(cost),
+    sellingPrice: parseFloat(price),
+    status: document.getElementById('m-status').value,
+    paymentMethod: document.getElementById('m-paymentMethod').value,
+    salesPerson: document.getElementById('m-salesPerson').value.trim(),
+    campaignName: document.getElementById('m-campaignName').value.trim(),
+    campaignChannel: document.getElementById('m-campaignChannel').value,
+    quotationId: '',
+    creditDuration: '',
+    vendor: '',
+    quotationDate: '',
+    salesOrderDate: new Date().toISOString().split('T')[0]
+  };
+  
+  if (isEdit) {
+    const idx = S.orders.findIndex(o => o.salesOrderId === id);
+    if (idx !== -1) {
+      S.orders[idx] = {...S.orders[idx], ...orderData};
+      logActivity('Updated order', id);
+      toast('Order updated!', 'success');
+    }
+  } else {
+    S.orders.push(orderData);
+    logActivity('Created order', id);
+    toast('Order created!', 'success');
+  }
+  
+  saveData();
+  closeOrderModal();
+  render();
 }
 
 // LOGS PAGE
